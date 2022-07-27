@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="camera" pkg="libcamera_device" type="libcamera_device_node">
+        <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
+        <param name="fps" value="30"/>
+        <param name="width" value="1920"/>
+        <param name="height" value="1080"/>
+    </node>
+</launch>
