@@ -1,0 +1,9 @@
+# ROS master URI.
+ros_master_uri: http://192.168.1.7:11311/
+
+# Name to use for the camera node. This will govern the names of the associated topics.
+node_name: camera0
+# Name of the launch file used for running the camera.
+launch_file: "full_hd_video.launch"
+# Name of the ROS package containing the launch files.
+package_name: "libcamera_device"
