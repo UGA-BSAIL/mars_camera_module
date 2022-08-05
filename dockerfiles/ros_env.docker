@@ -52,6 +52,6 @@ RUN cd libcamera && meson build --buildtype=release -Dpipelines=raspberrypi -Dip
     ninja -C build install
 
 # Install runtime dependencies.
-RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev valgrind && rm -rf /var/lib/apt/lists/*
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]

@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
     rate.sleep();
   }
   ROS_DEBUG_STREAM("Camera initialized!");
-  while (camera.WaitForFrame()) {
+  while (node.ok() && camera.WaitForFrame()) {
     ros::spinOnce();
   }
 

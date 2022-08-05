@@ -23,11 +23,6 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
     {libcamera::formats::RGB888, sensor_msgs::image_encodings::BGR8},
 };
 
-// Sane default options to use for video.
-const VideoOptions kDefaultOptions = {
-
-};
-
 }  // namespace
 
 CameraMessenger::CameraMessenger(std::unique_ptr<LibcameraEncoder>&& camera_app,
