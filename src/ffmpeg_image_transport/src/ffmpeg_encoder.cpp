@@ -3,15 +3,25 @@
  */
 
 #include "ffmpeg_image_transport/ffmpeg_encoder.h"
-#include "ffmpeg_image_transport_msgs/FFMPEGPacket.h"
 #include <sensor_msgs/Image.h>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <fstream>
-#include <iomanip>
+#include <unordered_map>
+#include <string>
 
 namespace ffmpeg_image_transport {
+namespace {
+
+// Maps profile names to FFMpeg profile identifiers.
+const std::unordered_map<std::string, int> kProfiles = {
+    {"baseline", FF_PROFILE_H264_BASELINE},
+    {"main", FF_PROFILE_H264_MAIN},
+    {"high", FF_PROFILE_H264_HIGH},
+};
+
+}  // namespace
 
   FFMPEGEncoder::FFMPEGEncoder() {
     // must init the packet and set the pointers to zero
@@ -95,9 +105,11 @@ namespace ffmpeg_image_transport {
 
       codecContext_->pix_fmt = pixFormat_;
 
-      if (av_opt_set(codecContext_->priv_data, "profile", profile_.c_str(),
-                     AV_OPT_SEARCH_CHILDREN) != 0) {
-        ROS_ERROR_STREAM("cannot set profile: " << profile_);
+      const auto& profile = kProfiles.find(profile_);
+      if (profile == kProfiles.end()) {
+        ROS_ERROR_STREAM("Unknown profile '" << profile_ << "', not setting.");
+      } else {
+        codecContext_->profile = profile->second;
       }
 
       if (av_opt_set(codecContext_->priv_data, "preset", preset_.c_str(),

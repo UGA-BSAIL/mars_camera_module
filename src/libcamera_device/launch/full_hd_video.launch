@@ -5,6 +5,8 @@
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node">
         <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
+        <param name="ffmpeg/profile" value="baseline" />
+        <param name="ffmpeg/bit_rate" value="16000000" />
         <param name="fps" value="30"/>
         <param name="width" value="1920"/>
         <param name="height" value="1080"/>
