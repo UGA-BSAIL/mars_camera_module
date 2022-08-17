@@ -32,7 +32,7 @@ namespace ffmpeg_image_transport {
   using Image = sensor_msgs::Image;
   using ImagePtr = sensor_msgs::ImagePtr;
   using ImageConstPtr = sensor_msgs::ImageConstPtr;
-  typedef std::unordered_map<int64_t, ros::Time> PTSMap;
+  typedef std::unordered_map<int64_t, ros::Time> PTSToStampMap;
 
   class FFMPEGEncoder {
     using FFMPEGPacket = ffmpeg_image_transport_msgs::FFMPEGPacket;
@@ -116,7 +116,7 @@ namespace ffmpeg_image_transport {
     AVFrame           *frame_{NULL};
     AVPacket          packet_;
     int64_t           pts_{0};
-    PTSMap            ptsToStamp_;
+    PTSToStampMap ptsToStamp_;
     // performance analysis
     bool              measurePerformance_{true};
     int64_t           totalInBytes_{0};

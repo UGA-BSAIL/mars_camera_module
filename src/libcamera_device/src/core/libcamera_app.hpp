@@ -9,6 +9,7 @@
 
 #include <sys/mman.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <memory>
@@ -59,6 +60,7 @@ public:
 	enum class MsgType
 	{
 		RequestComplete,
+                RequestTimeout,
 		Quit
 	};
 	typedef std::variant<CompletedRequestPtr> MsgPayload;
@@ -104,6 +106,12 @@ public:
 	void StopCamera();
 
 	Msg Wait();
+        template <class Rep, class Period>
+        Msg Wait(const std::chrono::duration<Rep, Period> &timeout) {
+          Msg message(MsgType::RequestTimeout);
+          msg_queue_.Wait(timeout, &message);
+          return message;
+        }
 	void PostMessage(MsgType &t, MsgPayload &p);
 
 	Stream *GetStream(std::string const &name, StreamInfo *info = nullptr) const;
@@ -140,13 +148,21 @@ private:
 		{
 			std::unique_lock<std::mutex> lock(mutex_);
 			cond_.wait(lock, [this] { return !queue_.empty(); });
-			T msg = std::move(queue_.front());
-			queue_.pop();
-			return msg;
+                        return GetNext();
 		}
+                template <class Rep, class Period>
+                bool Wait(const std::chrono::duration<Rep, Period> &timeout, T *msg) {
+                        std::unique_lock<std::mutex> lock(mutex_);
+                        if (!cond_.wait_for(lock, timeout, [this] {return !queue_.empty(); })) {
+                          // Wait timed out.
+                          return false;
+                        }
+                        *msg = GetNext();
+                        return true;
+                }
 		void Clear()
 		{
-			std::unique_lock<std::mutex> lock(mutex_);
+                        std::unique_lock<std::mutex> lock(mutex_);
 			queue_ = {};
 		}
 
@@ -154,6 +170,16 @@ private:
 		std::queue<T> queue_;
 		std::mutex mutex_;
 		std::condition_variable cond_;
+
+                /**
+                 * @brief Gets the next item from the queue without waiting.
+                 * @return The next item from the queue.
+                 */
+                T GetNext() {
+                        T msg = std::move(queue_.front());
+                        queue_.pop();
+                        return msg;
+                }
 	};
 	struct PreviewItem
 	{

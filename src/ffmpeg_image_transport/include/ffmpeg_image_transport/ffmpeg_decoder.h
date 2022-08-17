@@ -9,6 +9,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <std_msgs/Header.h>
 
 #include <memory>
 #include <unordered_map>
@@ -29,7 +30,7 @@ namespace ffmpeg_image_transport {
   using ImagePtr = sensor_msgs::ImagePtr;
   using ImageConstPtr = sensor_msgs::ImageConstPtr;
   using FFMPEGPacket = ffmpeg_image_transport_msgs::FFMPEGPacket;
-  typedef std::unordered_map<int64_t, ros::Time> PTSMap;
+  typedef std::unordered_map<int64_t, std_msgs::Header> PTSToHeaderMap;
 
   class FFMPEGDecoder {
   public:
@@ -58,10 +59,27 @@ namespace ffmpeg_image_transport {
     bool initDecoder(int width, int height,
                      const std::string &codecName,
                      const std::vector<std::string> &codec);
+
+    /**
+     * @brief Sends a packet to the decoder without checking that it has been
+     * decoded.
+     * @param msg The packet to send.
+     * @return True if it succeeded, false otherwise.
+     */
+    bool sendPacket(const FFMPEGPacket::ConstPtr &msg);
+
+    /**
+     * @brief Reads the next frame from the decoder. May result in a frame
+     * callback.
+     * @return True if it succeeded, false otherwise. IF successful, there may
+     * be additional frames to decode.
+     */
+    bool receiveFrame();
+
     // --------- variables
     Callback          callback_;
     // mapping of header
-    PTSMap            ptsToStamp_;
+    PTSToHeaderMap ptsToHeader_;
     // performance analysis
     bool              measurePerformance_{false};
     TDiff             tdiffTotal_;

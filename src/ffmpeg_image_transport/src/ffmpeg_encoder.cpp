@@ -210,7 +210,7 @@ const std::unordered_map<std::string, int> kProfiles = {
     }
 
     frame_->pts = pts_++; //
-    ptsToStamp_.insert(PTSMap::value_type(frame_->pts, header.stamp));
+    ptsToStamp_.insert(PTSToStampMap::value_type(frame_->pts, header.stamp));
 
     int ret = avcodec_send_frame(codecContext_, frame_);
     if (measurePerformance_) {

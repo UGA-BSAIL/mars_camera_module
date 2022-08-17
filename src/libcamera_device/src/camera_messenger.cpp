@@ -4,6 +4,8 @@
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
 
+#include <chrono>
+#include <cstdlib>
 #include <map>
 #include <utility>
 
@@ -22,6 +24,10 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
     {libcamera::formats::YUV422, sensor_msgs::image_encodings::YUV422},
     {libcamera::formats::RGB888, sensor_msgs::image_encodings::BGR8},
 };
+
+// Timeout to use when waiting for a frame before we consider the camera
+// stalled.
+const std::chrono::seconds kCameraTimeout(1);
 
 }  // namespace
 
@@ -117,8 +123,15 @@ bool CameraMessenger::WaitForFrame() {
     return false;
   }
 
-  LibcameraEncoder::Msg message = camera_app_->Wait();
-  if (message.type == LibcameraEncoder::MsgType::Quit) {
+  LibcameraEncoder::Msg message = camera_app_->Wait(kCameraTimeout);
+  if (message.type == LibcameraEncoder::MsgType::RequestTimeout) {
+    ROS_FATAL_STREAM(
+        "Timed out while waiting for a frame. This is either a hardware issue, "
+        "or a bug in libcamera.");
+    // It's not clear whether this is recoverable. Probably the best thing to do
+    // is bail out and hove systemd restart the whole node.
+    abort();
+  } else if (message.type == LibcameraEncoder::MsgType::Quit) {
     ROS_INFO_STREAM("Got LibCamera quit request.");
     return false;
   }
