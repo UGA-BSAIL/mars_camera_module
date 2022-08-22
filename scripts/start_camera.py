@@ -104,8 +104,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, handler)
     signal.signal(signal.SIGTERM, handler)
 
-    # Basically wait forever.
-    select.select([], [], [])
+    launcher.spin()
 
 
 if __name__ == "__main__":
