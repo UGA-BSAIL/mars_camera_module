@@ -8,7 +8,6 @@ This script handles deployment and management of the camera code.
 
 from functools import cache, partial
 import os
-import select
 import signal
 import sys
 from typing import Any
