@@ -3,7 +3,7 @@
     <!-- The name to use for the camera node. -->
     <arg name="node_name" default="camera"/>
 
-    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node">
+    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true">
         <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
