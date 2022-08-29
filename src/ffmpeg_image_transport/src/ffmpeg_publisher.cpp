@@ -67,9 +67,9 @@ namespace ffmpeg_image_transport {
   FFMPEGPublisher::publish(const sensor_msgs::Image& message,
                            const PublishFn &publish_fn) const {
     FFMPEGPublisher *me = const_cast<FFMPEGPublisher *>(this);
+    me->publishFunction_ = &publish_fn;
     if (!me->encoder_.isInitialized()) {
       me->initConfigServer();
-      me->publishFunction_ = &publish_fn;
       if (!me->encoder_.initialize(message.width, message.height,
               boost::bind(&FFMPEGPublisher::packetReady, me, boost::placeholders::_1))) {
         ROS_ERROR_STREAM("cannot initialize encoder!");

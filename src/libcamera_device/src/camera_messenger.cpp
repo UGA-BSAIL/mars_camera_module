@@ -27,7 +27,7 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
 
 // Timeout to use when waiting for a frame before we consider the camera
 // stalled.
-const std::chrono::seconds kCameraTimeout(1);
+const std::chrono::seconds kCameraTimeout(1000);
 
 }  // namespace
 

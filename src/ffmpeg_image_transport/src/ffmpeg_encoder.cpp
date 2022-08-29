@@ -10,6 +10,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <string>
+#include <utility>
 
 namespace ffmpeg_image_transport {
 namespace {
@@ -62,7 +63,7 @@ const std::unordered_map<std::string, int> kProfiles = {
   bool FFMPEGEncoder::initialize(int width, int height,
                                  Callback callback) {
     Lock lock(mutex_);
-    callback_ = callback;
+    callback_ = std::move(callback);
     return (openCodec(width, height));
   }
 

@@ -50,7 +50,7 @@ namespace ffmpeg_image_transport {
     typedef dynamic_reconfigure::Server<EncoderDynConfig> ConfigServer;
     std::shared_ptr<ros::NodeHandle>   nh_;
     std::shared_ptr<ConfigServer> configServer_;
-    const PublishFn              *publishFunction_{NULL};
+    const PublishFn              *publishFunction_{nullptr};
     FFMPEGEncoder                 encoder_;
     unsigned int                  frameCounter_{0};
     EncoderDynConfig              config_;
