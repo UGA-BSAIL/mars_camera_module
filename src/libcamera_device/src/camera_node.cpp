@@ -107,9 +107,11 @@ void ReconfigureParams(CameraMessenger *messenger,
  * @brief Ensures there is at least one subscriber to the camera topic(s) before
  *  continuing. If there is not one, it will stop the camera until there is.
  * @param publisher The camera publisher.
+ * @param node The node handle.
  * @param camera The camera itself.
  */
-void WaitForSubscriber(const Publisher &publisher, CameraMessenger *camera) {
+void WaitForSubscriber(const Publisher &publisher, const ros::NodeHandle &node,
+                       CameraMessenger *camera) {
   if (publisher.getNumSubscribers() > 0) {
     // We already have a subscriber, so we're done before we even started.
     return;
@@ -121,7 +123,7 @@ void WaitForSubscriber(const Publisher &publisher, CameraMessenger *camera) {
   // running the camera.
   camera->Stop();
   ROS_INFO_STREAM("Waiting for a camera subscriber...");
-  while (publisher.getNumSubscribers() == 0) {
+  while (node.ok() && publisher.getNumSubscribers() == 0) {
     rate.sleep();
     ros::spinOnce();
   }
@@ -177,7 +179,7 @@ int main(int argc, char **argv) {
   }
   ROS_DEBUG_STREAM("Camera initialized!");
   while (node.ok() && camera.WaitForFrame()) {
-    WaitForSubscriber(image_publisher, &camera);
+    WaitForSubscriber(image_publisher, node, &camera);
     ros::spinOnce();
   }
 

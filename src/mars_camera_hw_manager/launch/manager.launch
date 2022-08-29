@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- Standard launch file for the hardware manager. -->
+
+<launch>
+    <!-- Camera ID to use, which will dictate the name of the topic it listens on. -->
+    <arg name="camera_id" default="camera"/>
+
+    <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="manager_node.py">
+        <param name="camera_id" value="$(arg camera_id)"/>
+    </node>
+</launch>

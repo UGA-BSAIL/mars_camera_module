@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- The name to use for the camera node. -->
+    <arg name="node_name" default="camera"/>
+
+    <include file="$(find libcamera_device)/launch/full_hd_video.launch">
+            <arg name="node_name" value="$(arg node_name)" />
+    </include>
+    <include file="$(find mars_camera_hw_manager)/launch/manager.launch" />
+
+</launch>
