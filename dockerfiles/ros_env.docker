@@ -1,12 +1,5 @@
 # Common container with a ROS Melodic installation.
-FROM ubuntu:18.04 as common
-
-# These dependencies are needed for installing keys.
-RUN apt-get update && apt-get install -y gnupg2 curl
-
-# Update apt sources to include ROS.
-RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu bionic main" > /etc/apt/sources.list.d/ros-latest.list'
-RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
+FROM ros:melodic-ros-base as common
 
 # Fix timezones.
 ENV TZ=America/New_York
@@ -14,7 +7,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install ROS.
 RUN apt-get update && apt-get install -y \
-    ros-melodic-ros-base ros-melodic-image-transport ros-melodic-vision-opencv
+    ros-melodic-image-transport ros-melodic-vision-opencv
 
 # Add ros user.
 ARG ROS_UID
@@ -40,7 +33,7 @@ ADD scripts/catkin_cmake.sh /usr/bin/catkin_cmake
 
 # Install libcamera.
 RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yaml python3-ply \
-    python3-jinja2 libgnutls28-dev openssl libdw-dev libudev-dev python3-pip gcc-8 g++-8 && \
+    python3-jinja2 libgnutls28-dev openssl libdw-dev python3-pip gcc-8 g++-8 && \
     rm -rf /var/lib/apt/lists/*
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 50
