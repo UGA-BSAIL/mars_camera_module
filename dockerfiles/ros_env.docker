@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y \
 ARG ROS_UID
 RUN useradd -m -u $ROS_UID ros
 
+# Install FFMpeg.
+RUN apt-get update && apt-get install -y software-properties-common
+RUN add-apt-repository -y ppa:savoury1/ffmpeg4
+RUN apt-get install -y ffmpeg
+
 # Container for building the code.
 FROM common as builder
 
@@ -46,13 +51,30 @@ RUN cd libcamera \
     -Ddocumentation=disabled && \
     ninja -C build install
 
-# Install FFMpeg.
-RUN apt-get update && apt-get install -y software-properties-common
-RUN add-apt-repository -y ppa:savoury1/ffmpeg4
-RUN apt-get install -y ffmpeg
-
 # Install runtime dependencies.
 RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev libv4l-dev \
     && rm -rf /var/lib/apt/lists/*
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
+
+FROM common as video_extract
+
+RUN apt-get update && apt-get install -y libv4l-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+USER ros
+
+# Create a workspace and add the required packages.
+RUN mkdir -p ~/catkin_ws/src
+WORKDIR /home/ros/catkin_ws/src
+ADD src/ffmpeg_image_transport/ ffmpeg_image_transport
+ADD src/ffmpeg_image_transport_msgs/ ffmpeg_image_transport_msgs
+RUN git clone https://github.com/daniilidis-group/ffmpeg_image_transport_tools.git
+RUN git clone https://github.com/daniilidis-group/flex_sync.git
+
+WORKDIR /home/ros/catkin_ws
+RUN bash -c "source /opt/ros/melodic/setup.bash && catkin_make"
+
+# Copy launch file.
+ADD launch/split_bag.launch split_bag.launch
+

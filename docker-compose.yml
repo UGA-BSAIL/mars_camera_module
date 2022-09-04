@@ -13,3 +13,19 @@ services:
       - "1824:22"
     volumes:
       - .:/home/ros/ros_libcamera
+
+  video_extract:
+    # Docker container for extracting videos from bagfiles.
+    build:
+      context: .
+      dockerfile: dockerfiles/ros_env.docker
+      target: video_extract
+      args:
+        # Force the user in the container to have the same UID to avoid permission issues.
+        ROS_UID: "${ROS_UID}"
+    environment:
+      # The bag file to extract cameras from.
+      BAG_FILE: "${BAG_FILE}"
+      # The base path for the output files.
+      OUT_FILE_BASE: "${OUT_FILE_BASE:-/host/video_}"
+    command: bash -c "source devel/setup.bash && roslaunch split_bag.launch bag:=$${BAG_FILE} out_file_base:=$${OUT_FILE_BASE}"
