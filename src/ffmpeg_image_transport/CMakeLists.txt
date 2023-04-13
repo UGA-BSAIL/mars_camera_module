@@ -5,30 +5,31 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
 find_package(catkin REQUIRED COMPONENTS roscpp cv_bridge image_transport ffmpeg_image_transport_msgs sensor_msgs dynamic_reconfigure)
 
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(FFMPEG REQUIRED)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 find_package(V4L2 REQUIRED)
 
 generate_dynamic_reconfigure_options(cfg/EncoderDyn.cfg)
 
+include(cmake/ffmpeg.cmake)
+
 catkin_package(
 INCLUDE_DIRS include
 LIBRARIES ${PROJECT_NAME}
-DEPENDS FFMPEG
 CATKIN_DEPENDS roscpp cv_bridge image_transport
 ffmpeg_image_transport_msgs sensor_msgs dynamic_reconfigure)
 
 find_package(OpenCV)
 
-include_directories(include
-  ${FFMPEG_INCLUDE_DIR}
+include_directories(BEFORE
+  include
+  ${FFMPEG_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS})
 
 # add the plugin
 add_library(${PROJECT_NAME} src/manifest.cpp src/ffmpeg_publisher.cpp
-src/ffmpeg_subscriber.cpp src/ffmpeg_encoder.cpp
-src/ffmpeg_decoder.cpp src/tdiff.cpp ${FFMPEG_LIBRARIES})
+		src/ffmpeg_subscriber.cpp src/ffmpeg_encoder.cpp
+		src/ffmpeg_decoder.cpp src/tdiff.cpp)
 
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${FFMPEG_LIBRARIES} ${V4L2_LIBRARIES})
@@ -45,6 +46,6 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 install(FILES
-  ffmpeg_plugins.xml
+		ffmpeg_plugins.xml
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

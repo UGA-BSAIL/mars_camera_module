@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  ros:
+    # Docker container for running ros.
+    image: ros:noetic-ros-core
+    command: roscore
+    ports:
+      - "11311:11311"
+
+  extract_videos:
+    # Docker container for extracting videos.
+    build:
+      context: .
+      dockerfile: dockerfiles/ros_env.docker
+      target: builder
+      args:
+        # Force the user in the container to have the same UID to avoid permission issues.
+        ROS_UID: "${ROS_UID}"
+    environment:
+      ROS_MASTER_URI: "http://localhost:11311"
+      LD_LIBRARY_PATH: "$${LD_LIBRARY_PATH}:/usr/local/lib/"
+      SCRIPT_ARGS: "${SCRIPT_ARGS:-}"
+    command:
+      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 scripts/extract_videos.py $${SCRIPT_ARGS}"
+    volumes:
+      - .:/home/ros/ros_libcamera
+      - scratch:/tmp
+
+volumes:
+  # Create a volume for temporary data to speed up Docker FS operations.
+  scratch:
+    driver_opts:
+      type: "tmpfs"
