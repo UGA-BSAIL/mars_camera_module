@@ -12,10 +12,11 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any
 import argparse
+import time
+import shutil
 import roslaunch
 from ffmpeg import FFmpeg, Progress
 from loguru import logger
-import time
 
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
 """
@@ -168,7 +169,7 @@ def _process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> 
         # Copy timestamps as well.
         for i, ts_file in enumerate(sorted(video_dir.glob("*.txt"))):
             output_file = output_base.parent / f"{output_base.name}_cam{i}_ts.txt"
-            ts_file.rename(output_file)
+            shutil.copyfile(ts_file, output_file)
 
 
 def _make_parser() -> argparse.ArgumentParser:
@@ -187,7 +188,7 @@ def _make_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help="The base path to write output files to.",
-        default="./video",
+        default="/host/video",
     )
 
     parser.add_argument(
