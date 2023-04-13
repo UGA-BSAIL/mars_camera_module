@@ -59,3 +59,16 @@ ADD scripts/requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
+
+# Container for video extraction.
+FROM builder as video_extractor
+
+# Build the code.
+USER ros
+
+WORKDIR /home/ros/ros_libcamera/
+ADD src/ src/
+RUN bash -c "source /opt/ros/noetic/setup.bash && catkin_make"
+
+# Add scripts to run.
+ADD scripts/extract_videos.py extract_videos.py

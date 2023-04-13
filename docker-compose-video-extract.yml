@@ -13,7 +13,7 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/ros_env.docker
-      target: builder
+      target: video_extractor
       args:
         # Force the user in the container to have the same UID to avoid permission issues.
         ROS_UID: "${ROS_UID}"
@@ -22,13 +22,9 @@ services:
       LD_LIBRARY_PATH: "$${LD_LIBRARY_PATH}:/usr/local/lib/"
       SCRIPT_ARGS: "${SCRIPT_ARGS:-}"
     command:
-      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 scripts/extract_videos.py $${SCRIPT_ARGS}"
+      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py $${SCRIPT_ARGS}"
     volumes:
-      - .:/home/ros/ros_libcamera
-      - scratch:/tmp
-
-volumes:
-  # Create a volume for temporary data to speed up Docker FS operations.
-  scratch:
-    driver_opts:
-      type: "tmpfs"
+      - .:/host
+    tmpfs:
+      # Use this to speed up FS operations.
+      - /tmp
