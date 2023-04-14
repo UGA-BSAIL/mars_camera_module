@@ -20,9 +20,10 @@ services:
     environment:
       ROS_MASTER_URI: "http://localhost:11311"
       LD_LIBRARY_PATH: "$${LD_LIBRARY_PATH}:/usr/local/lib/"
-      SCRIPT_ARGS: "${SCRIPT_ARGS:-}"
+      BAG_FILE: "${BAG_FILE}"
+      EXTRA_ARGS: "${EXTRA_ARGS:-}"
     command:
-      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py $${SCRIPT_ARGS}"
+      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py /host/$${BAG_FILE} $${EXTRA_ARGS}"
     volumes:
       - .:/host
     tmpfs:
