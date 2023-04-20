@@ -39,9 +39,9 @@ RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yam
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 50
 RUN pip3 install meson
-RUN git clone https://git.libcamera.org/libcamera/libcamera.git
+RUN git clone https://github.com/raspberrypi/libcamera.git
 RUN cd libcamera \
-    && git checkout 458d917 \
+    && git checkout 923f5d70 \
     && meson build --buildtype=release -Dpipelines=raspberrypi -Dipas=raspberrypi \
     -Dv4l2=true -Dgstreamer=disabled -Dtest=false -Dlc-compliance=disabled -Dcam=disabled -Dqcam=disabled \
     -Ddocumentation=disabled && \

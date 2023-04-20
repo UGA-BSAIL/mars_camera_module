@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -21,7 +22,9 @@ extern "C"
 #include "libavutil/audio_fifo.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/hwcontext_drm.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/timestamp.h"
+#include "libavutil/version.h"
 #include "libswresample/swresample.h"
 }
 
@@ -47,12 +50,13 @@ private:
 	void videoThread();
 	void audioThread();
 
+	static void releaseBuffer(void *opaque, uint8_t *data);
+
 	std::atomic<bool> output_ready_;
 	bool abort_video_;
 	bool abort_audio_;
-	int fd_;
 	uint64_t video_start_ts_;
-	uint64_t audio_start_ts_;
+	uint64_t audio_samples_;
 
 	std::queue<AVFrame *> frame_queue_;
 	std::mutex video_mutex_;
@@ -67,5 +71,7 @@ private:
 	AVStream *stream_[3];
 	AVFormatContext *in_fmt_ctx_;
 	AVFormatContext *out_fmt_ctx_;
-};
 
+	std::mutex drm_queue_lock_;
+	std::queue<std::unique_ptr<AVDRMFrameDescriptor>> drm_frame_queue_;
+};
