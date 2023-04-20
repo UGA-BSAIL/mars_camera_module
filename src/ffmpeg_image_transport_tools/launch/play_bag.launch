@@ -1,0 +1,10 @@
+<launch>
+  <arg name="bag"/>
+  <arg name="transport" default="/ffmpeg"/>
+  <!-- nodes -->
+  <node pkg="ffmpeg_image_transport_tools" type="play_bag_node"
+	name="play_bag" output="screen">
+    <param name="bag_file" value="$(arg bag)"/>
+    <param name="transport" value="$(arg transport)"/>
+  </node>
+</launch>

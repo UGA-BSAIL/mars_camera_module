@@ -7,15 +7,18 @@
 
 #include "preview/preview.hpp"
 
-#include "frame_info.hpp"
-#include "libcamera_app.hpp"
-#include "options.hpp"
+#include "core/frame_info.hpp"
+#include "core/libcamera_app.hpp"
+#include "core/options.hpp"
 
+#include <cmath>
 #include <fcntl.h>
 
 #include <sys/ioctl.h>
 
 #include <linux/videodev2.h>
+
+unsigned int LibcameraApp::verbosity = 2;
 
 // If we definitely appear to be running the old camera stack, complain and give up.
 // Everything else, Pi or not, we let through.
@@ -27,7 +30,9 @@ static void check_camera_stack()
 		return;
 
 	v4l2_capability caps;
-	int ret = ioctl(fd, VIDIOC_QUERYCAP, &caps);
+	unsigned long request = VIDIOC_QUERYCAP;
+
+	int ret = ioctl(fd, request, &caps);
 	close(fd);
 
 	if (ret < 0 || strcmp((char *)caps.driver, "bm2835 mmal"))
@@ -70,10 +75,10 @@ LibcameraApp::LibcameraApp(std::unique_ptr<Options> opts)
 
 LibcameraApp::~LibcameraApp()
 {
-	if (options_->verbose && !options_->help)
-		std::cerr << "Closing Libcamera application"
-				  << "(frames displayed " << preview_frames_displayed_ << ", dropped " << preview_frames_dropped_ << ")"
-				  << std::endl;
+	if (!options_->help)
+		LOG(2, "Closing Libcamera application"
+				   << "(frames displayed " << preview_frames_displayed_ << ", dropped " << preview_frames_dropped_
+				   << ")");
 	StopCamera();
 	Teardown();
 	CloseCamera();
@@ -84,14 +89,19 @@ std::string const &LibcameraApp::CameraId() const
 	return camera_->id();
 }
 
+std::string LibcameraApp::CameraModel() const
+{
+	auto model = camera_->properties().get(properties::Model);
+	return model ? *model : camera_->id();
+}
+
 void LibcameraApp::OpenCamera()
 {
 	// Make a preview window.
 	preview_ = std::unique_ptr<Preview>(make_preview(options_.get()));
 	preview_->SetDoneCallback(std::bind(&LibcameraApp::previewDoneCallback, this, std::placeholders::_1));
 
-	if (options_->verbose)
-		std::cerr << "Opening camera..." << std::endl;
+	LOG(2, "Opening camera...");
 
 	camera_manager_ = std::make_unique<CameraManager>();
 	int ret = camera_manager_->start();
@@ -118,14 +128,39 @@ void LibcameraApp::OpenCamera()
 		throw std::runtime_error("failed to acquire camera " + cam_id);
 	camera_acquired_ = true;
 
-	if (options_->verbose)
-		std::cerr << "Acquired camera " << cam_id << std::endl;
+	LOG(2, "Acquired camera " << cam_id);
 
 	if (!options_->post_process_file.empty())
 		post_processor_.Read(options_->post_process_file);
 	// The queue takes over ownership from the post-processor.
 	post_processor_.SetCallback(
 		[this](CompletedRequestPtr &r) { this->msg_queue_.Post(Msg(MsgType::RequestComplete, std::move(r))); });
+
+	if (options_->framerate)
+	{
+		std::unique_ptr<CameraConfiguration> config = camera_->generateConfiguration({ libcamera::StreamRole::Raw });
+		const libcamera::StreamFormats &formats = config->at(0).formats();
+
+		// Suppress log messages when enumerating camera modes.
+		libcamera::logSetLevel("RPI", "ERROR");
+		libcamera::logSetLevel("Camera", "ERROR");
+
+		for (const auto &pix : formats.pixelformats())
+		{
+			for (const auto &size : formats.sizes(pix))
+			{
+				config->at(0).size = size;
+				config->at(0).pixelFormat = pix;
+				config->validate();
+				camera_->configure(config.get());
+				auto fd_ctrl = camera_->controls().find(&controls::FrameDurationLimits);
+				sensor_modes_.emplace_back(size, pix, 1.0e6 / fd_ctrl->second.min().get<int64_t>());
+			}
+		}
+
+		libcamera::logSetLevel("RPI", "INFO");
+		libcamera::logSetLevel("Camera", "INFO");
+	}
 }
 
 void LibcameraApp::CloseCamera()
@@ -140,18 +175,66 @@ void LibcameraApp::CloseCamera()
 
 	camera_manager_.reset();
 
-	if (options_->verbose && !options_->help)
-		std::cerr << "Camera closed" << std::endl;
+	if (!options_->help)
+		LOG(2, "Camera closed");
+}
+
+Mode LibcameraApp::selectModeForFramerate(const libcamera::Size &req, double fps)
+{
+	auto scoreFormat = [](double desired, double actual) -> double
+	{
+		double score = desired - actual;
+		// Smaller desired dimensions are preferred.
+		if (score < 0.0)
+			score = (-score) / 8;
+		// Penalise non-exact matches.
+		if (actual != desired)
+			score *= 2;
+
+		return score;
+	};
+
+	constexpr float penalty_AR = 1500.0;
+	constexpr float penalty_BD = 500.0;
+	constexpr float penalty_FPS = 2000.0;
+
+	double best_score = std::numeric_limits<double>::max(), score;
+	SensorMode best_mode;
+
+	LOG(1, "Mode selection:");
+	for (const auto &mode : sensor_modes_)
+	{
+		double reqAr = static_cast<double>(req.width) / req.height;
+		double fmtAr = static_cast<double>(mode.size.width) / mode.size.height;
+
+		// Similar scoring mechanism that our pipeline handler does internally.
+		score = scoreFormat(req.width, mode.size.width);
+		score += scoreFormat(req.height, mode.size.height);
+		score += penalty_AR * scoreFormat(reqAr, fmtAr);
+		score += penalty_FPS * std::abs(fps - std::min(mode.fps, fps));
+		score += penalty_BD * (16 - mode.depth());
+
+		if (score <= best_score)
+		{
+			best_score = score;
+			best_mode.size = mode.size;
+			best_mode.format = mode.format;
+		}
+
+		LOG(1, "    " << mode.format.toString() << " " << mode.size.toString() << " - Score: " << score);
+	}
+
+	return { best_mode.size.width, best_mode.size.height, best_mode.depth(), true };
 }
 
 void LibcameraApp::ConfigureViewfinder()
 {
-	if (options_->verbose)
-		std::cerr << "Configuring viewfinder..." << std::endl;
+	LOG(2, "Configuring viewfinder...");
 
+	bool select_mode = options_->framerate && options_->framerate.value() && options_->viewfinder_mode_string.empty();
 	int lores_stream_num = 0, raw_stream_num = 0;
 	bool have_lores_stream = options_->lores_width && options_->lores_height;
-	bool have_raw_stream = options_->viewfinder_mode.bit_depth;
+	bool have_raw_stream = options_->viewfinder_mode.bit_depth || select_mode;
 
 	StreamRoles stream_roles = { StreamRole::Viewfinder };
 	int stream_num = 1;
@@ -165,21 +248,21 @@ void LibcameraApp::ConfigureViewfinder()
 		throw std::runtime_error("failed to generate viewfinder configuration");
 
 	Size size(1280, 960);
+	auto area = camera_->properties().get(properties::PixelArrayActiveAreas);
 	if (options_->viewfinder_width && options_->viewfinder_height)
 		size = Size(options_->viewfinder_width, options_->viewfinder_height);
-	else if (camera_->properties().contains(properties::PixelArrayActiveAreas))
+	else if (area)
 	{
 		// The idea here is that most sensors will have a 2x2 binned mode that
 		// we can pick up. If it doesn't, well, you can always specify the size
 		// you want exactly with the viewfinder_width/height options_->
-		size = camera_->properties().get(properties::PixelArrayActiveAreas)[0].size() / 2;
+		size = (*area)[0].size() / 2;
 		// If width and height were given, we might be switching to capture
 		// afterwards - so try to match the field of view.
 		if (options_->width && options_->height)
 			size = size.boundedToAspectRatio(Size(options_->width, options_->height));
 		size.alignDownTo(2, 2); // YUV420 will want to be even
-		if (options_->verbose)
-			std::cerr << "Viewfinder size chosen is " << size.toString() << std::endl;
+		LOG(2, "Viewfinder size chosen is " << size.toString());
 	}
 
 	// Finally trim the image size to the largest that the preview can handle.
@@ -188,13 +271,14 @@ void LibcameraApp::ConfigureViewfinder()
 	if (max_size.width && max_size.height)
 	{
 		size.boundTo(max_size.boundedToAspectRatio(size)).alignDownTo(2, 2);
-		if (options_->verbose)
-			std::cerr << "Final viewfinder size is " << size.toString() << std::endl;
+		LOG(2, "Final viewfinder size is " << size.toString());
 	}
 
 	// Now we get to override any of the default settings from the options_->
 	configuration_->at(0).pixelFormat = libcamera::formats::YUV420;
 	configuration_->at(0).size = size;
+	if (options_->viewfinder_buffer_count > 0)
+		configuration_->at(0).bufferCount = options_->viewfinder_buffer_count;
 
 	if (have_lores_stream)
 	{
@@ -206,6 +290,9 @@ void LibcameraApp::ConfigureViewfinder()
 		configuration_->at(lores_stream_num).size = lores_size;
 		configuration_->at(lores_stream_num).bufferCount = configuration_->at(0).bufferCount;
 	}
+
+	if (select_mode)
+		options_->viewfinder_mode = selectModeForFramerate(size, options_->framerate.value());
 
 	if (have_raw_stream)
 	{
@@ -229,14 +316,12 @@ void LibcameraApp::ConfigureViewfinder()
 
 	post_processor_.Configure();
 
-	if (options_->verbose)
-		std::cerr << "Viewfinder setup complete" << std::endl;
+	LOG(2, "Viewfinder setup complete");
 }
 
 void LibcameraApp::ConfigureStill(unsigned int flags)
 {
-	if (options_->verbose)
-		std::cerr << "Configuring still capture..." << std::endl;
+	LOG(2, "Configuring still capture...");
 
 	// Always request a raw stream as this forces the full resolution capture mode.
 	// (options_->mode can override the choice of camera mode, however.)
@@ -256,11 +341,13 @@ void LibcameraApp::ConfigureStill(unsigned int flags)
 		configuration_->at(0).bufferCount = 2;
 	else if ((flags & FLAG_STILL_BUFFER_MASK) == FLAG_STILL_TRIPLE_BUFFER)
 		configuration_->at(0).bufferCount = 3;
+	else if (options_->buffer_count > 0)
+		configuration_->at(0).bufferCount = options_->buffer_count;
 	if (options_->width)
 		configuration_->at(0).size.width = options_->width;
 	if (options_->height)
 		configuration_->at(0).size.height = options_->height;
-	configuration_->at(0).colorSpace = libcamera::ColorSpace::Jpeg;
+	configuration_->at(0).colorSpace = libcamera::ColorSpace::Sycc;
 	configuration_->transform = options_->transform;
 
 	post_processor_.AdjustConfig("still", &configuration_->at(0));
@@ -280,16 +367,15 @@ void LibcameraApp::ConfigureStill(unsigned int flags)
 
 	post_processor_.Configure();
 
-	if (options_->verbose)
-		std::cerr << "Still capture setup complete" << std::endl;
+	LOG(2, "Still capture setup complete");
 }
 
 void LibcameraApp::ConfigureVideo(unsigned int flags)
 {
-	if (options_->verbose)
-		std::cerr << "Configuring video..." << std::endl;
+	LOG(2, "Configuring video...");
 
-	bool have_raw_stream = (flags & FLAG_VIDEO_RAW) || options_->mode.bit_depth;
+	bool select_mode = options_->framerate && options_->framerate.value() && options_->mode_string.empty();
+	bool have_raw_stream = (flags & FLAG_VIDEO_RAW) || options_->mode.bit_depth || select_mode;
 	bool have_lores_stream = options_->lores_width && options_->lores_height;
 	StreamRoles stream_roles = { StreamRole::VideoRecording };
 	int lores_index = 1;
@@ -308,12 +394,14 @@ void LibcameraApp::ConfigureVideo(unsigned int flags)
 	StreamConfiguration &cfg = configuration_->at(0);
 	cfg.pixelFormat = libcamera::formats::RGB888;
 	cfg.bufferCount = 6; // 6 buffers is better than 4
+	if (options_->buffer_count > 0)
+		cfg.bufferCount = options_->buffer_count;
 	if (options_->width)
 		cfg.size.width = options_->width;
 	if (options_->height)
 		cfg.size.height = options_->height;
 	if (flags & FLAG_VIDEO_JPEG_COLOURSPACE)
-		cfg.colorSpace = libcamera::ColorSpace::Jpeg;
+		cfg.colorSpace = libcamera::ColorSpace::Sycc;
 	else if (cfg.size.width >= 1280 || cfg.size.height >= 720)
 		cfg.colorSpace = libcamera::ColorSpace::Rec709;
 	else
@@ -321,6 +409,9 @@ void LibcameraApp::ConfigureVideo(unsigned int flags)
 	configuration_->transform = options_->transform;
 
 	post_processor_.AdjustConfig("video", &configuration_->at(0));
+
+	if (select_mode)
+		options_->mode = selectModeForFramerate(cfg.size, options_->framerate.value());
 
 	if (have_raw_stream)
 	{
@@ -357,8 +448,7 @@ void LibcameraApp::ConfigureVideo(unsigned int flags)
 
 	post_processor_.Configure();
 
-	if (options_->verbose)
-		std::cerr << "Video setup complete" << std::endl;
+	LOG(2, "Video setup complete");
 }
 
 void LibcameraApp::Teardown()
@@ -367,8 +457,8 @@ void LibcameraApp::Teardown()
 
 	post_processor_.Teardown();
 
-	if (options_->verbose && !options_->help)
-		std::cerr << "Tearing down requests, buffers and configuration" << std::endl;
+	if (!options_->help)
+		LOG(2, "Tearing down requests, buffers and configuration");
 
 	for (auto &iter : mapped_buffers_)
 	{
@@ -396,56 +486,116 @@ void LibcameraApp::StartCamera()
 
 	// Build a list of initial controls that we must set in the camera before starting it.
 	// We don't overwrite anything the application may have set before calling us.
-	if (!controls_.contains(controls::ScalerCrop) && options_->roi_width != 0 && options_->roi_height != 0)
+	if (!controls_.get(controls::ScalerCrop) && options_->roi_width != 0 && options_->roi_height != 0)
 	{
-		Rectangle sensor_area = camera_->properties().get(properties::ScalerCropMaximum);
+		Rectangle sensor_area = *camera_->properties().get(properties::ScalerCropMaximum);
 		int x = options_->roi_x * sensor_area.width;
 		int y = options_->roi_y * sensor_area.height;
 		int w = options_->roi_width * sensor_area.width;
 		int h = options_->roi_height * sensor_area.height;
 		Rectangle crop(x, y, w, h);
 		crop.translateBy(sensor_area.topLeft());
-		if (options_->verbose)
-			std::cerr << "Using crop " << crop.toString() << std::endl;
+		LOG(2, "Using crop " << crop.toString());
 		controls_.set(controls::ScalerCrop, crop);
+	}
+
+	if (!controls_.get(controls::AfWindows) && !controls_.get(controls::AfMetering) && options_->afWindow_width != 0 &&
+		options_->afWindow_height != 0)
+	{
+		Rectangle sensor_area = *camera_->properties().get(properties::ScalerCropMaximum);
+		int x = options_->afWindow_x * sensor_area.width;
+		int y = options_->afWindow_y * sensor_area.height;
+		int w = options_->afWindow_width * sensor_area.width;
+		int h = options_->afWindow_height * sensor_area.height;
+		Rectangle afwindows_rectangle[1];
+		afwindows_rectangle[0] = Rectangle(x, y, w, h);
+		afwindows_rectangle[0].translateBy(sensor_area.topLeft());
+		LOG(2, "Using AfWindow " << afwindows_rectangle[0].toString());
+		//activate the AfMeteringWindows
+		controls_.set(controls::AfMetering, controls::AfMeteringWindows);
+		//set window
+		controls_.set(controls::AfWindows, afwindows_rectangle);
 	}
 
 	// Framerate is a bit weird. If it was set programmatically, we go with that, but
 	// otherwise it applies only to preview/video modes. For stills capture we set it
 	// as long as possible so that we get whatever the exposure profile wants.
-	if (!controls_.contains(controls::FrameDurationLimits))
+	if (!controls_.get(controls::FrameDurationLimits))
 	{
 		if (StillStream())
-			controls_.set(controls::FrameDurationLimits, { INT64_C(100), INT64_C(1000000000) });
-		else if (options_->framerate > 0)
+			controls_.set(controls::FrameDurationLimits,
+						  libcamera::Span<const int64_t, 2>({ INT64_C(100), INT64_C(1000000000) }));
+		else if (!options_->framerate || options_->framerate.value() > 0)
 		{
-			int64_t frame_time = 1000000 / options_->framerate; // in us
-			controls_.set(controls::FrameDurationLimits, { frame_time, frame_time });
+			int64_t frame_time = 1000000 / options_->framerate.value_or(DEFAULT_FRAMERATE); // in us
+			controls_.set(controls::FrameDurationLimits,
+						  libcamera::Span<const int64_t, 2>({ frame_time, frame_time }));
 		}
 	}
 
-	if (!controls_.contains(controls::ExposureTime) && options_->shutter)
+	if (!controls_.get(controls::ExposureTime) && options_->shutter)
 		controls_.set(controls::ExposureTime, options_->shutter);
-	if (!controls_.contains(controls::AnalogueGain) && options_->gain)
+	if (!controls_.get(controls::AnalogueGain) && options_->gain)
 		controls_.set(controls::AnalogueGain, options_->gain);
-	if (!controls_.contains(controls::AeMeteringMode))
+	if (!controls_.get(controls::AeMeteringMode))
 		controls_.set(controls::AeMeteringMode, options_->metering_index);
-	if (!controls_.contains(controls::AeExposureMode))
+	if (!controls_.get(controls::AeExposureMode))
 		controls_.set(controls::AeExposureMode, options_->exposure_index);
-	if (!controls_.contains(controls::ExposureValue))
+	if (!controls_.get(controls::ExposureValue))
 		controls_.set(controls::ExposureValue, options_->ev);
-	if (!controls_.contains(controls::AwbMode))
+	if (!controls_.get(controls::AwbMode))
 		controls_.set(controls::AwbMode, options_->awb_index);
-	if (!controls_.contains(controls::ColourGains) && options_->awb_gain_r && options_->awb_gain_b)
-		controls_.set(controls::ColourGains, { options_->awb_gain_r, options_->awb_gain_b });
-	if (!controls_.contains(controls::Brightness))
+	if (!controls_.get(controls::ColourGains) && options_->awb_gain_r && options_->awb_gain_b)
+		controls_.set(controls::ColourGains,
+					  libcamera::Span<const float, 2>({ options_->awb_gain_r, options_->awb_gain_b }));
+	if (!controls_.get(controls::Brightness))
 		controls_.set(controls::Brightness, options_->brightness);
-	if (!controls_.contains(controls::Contrast))
+	if (!controls_.get(controls::Contrast))
 		controls_.set(controls::Contrast, options_->contrast);
-	if (!controls_.contains(controls::Saturation))
+	if (!controls_.get(controls::Saturation))
 		controls_.set(controls::Saturation, options_->saturation);
-	if (!controls_.contains(controls::Sharpness))
+	if (!controls_.get(controls::Sharpness))
 		controls_.set(controls::Sharpness, options_->sharpness);
+
+	// AF Controls, where supported and not already set
+	if (!controls_.get(controls::AfMode) && camera_->controls().count(&controls::AfMode) > 0)
+	{
+		int afm = options_->afMode_index;
+		if (afm == -1)
+		{
+			// Choose a default AF mode based on other options
+			if (options_->lens_position || options_->set_default_lens_position || options_->af_on_capture)
+				afm = controls::AfModeManual;
+			else
+				afm = camera_->controls().at(&controls::AfMode).max().get<int>();
+		}
+		controls_.set(controls::AfMode, afm);
+	}
+	if (!controls_.get(controls::AfRange) && camera_->controls().count(&controls::AfRange) > 0)
+		controls_.set(controls::AfRange, options_->afRange_index);
+	if (!controls_.get(controls::AfSpeed) && camera_->controls().count(&controls::AfSpeed) > 0)
+		controls_.set(controls::AfSpeed, options_->afSpeed_index);
+
+	if (controls_.get(controls::AfMode).value_or(controls::AfModeManual) == controls::AfModeAuto)
+	{
+		// When starting a viewfinder or video stream in AF "auto" mode,
+		// trigger a scan now (but don't move the lens when capturing a still).
+		// If an application requires more control over AF triggering, it may
+		// override this behaviour with prior settings of AfMode or AfTrigger.
+		if (!StillStream() && !controls_.get(controls::AfTrigger))
+			controls_.set(controls::AfTrigger, controls::AfTriggerStart);
+	}
+	else if ((options_->lens_position || options_->set_default_lens_position) &&
+			 camera_->controls().count(&controls::LensPosition) > 0 && !controls_.get(controls::LensPosition))
+	{
+		float f;
+		if (options_->lens_position)
+			f = options_->lens_position.value();
+		else
+			f = camera_->controls().at(&controls::LensPosition).def().get<float>();
+		LOG(2, "Setting LensPosition: " << f);
+		controls_.set(controls::LensPosition, f);
+	}
 
 	if (camera_->start(&controls_))
 		throw std::runtime_error("failed to start camera");
@@ -463,8 +613,7 @@ void LibcameraApp::StartCamera()
 			throw std::runtime_error("Failed to queue request");
 	}
 
-	if (options_->verbose)
-		std::cerr << "Camera started!" << std::endl;
+	LOG(2, "Camera started!");
 }
 
 void LibcameraApp::StopCamera()
@@ -496,8 +645,8 @@ void LibcameraApp::StopCamera()
 
 	controls_.clear(); // no need for mutex here
 
-	if (options_->verbose && !options_->help)
-		std::cerr << "Camera stopped!" << std::endl;
+	if (!options_->help)
+		LOG(2, "Camera stopped!");
 }
 
 LibcameraApp::Msg LibcameraApp::Wait()
@@ -509,25 +658,31 @@ void LibcameraApp::queueRequest(CompletedRequest *completed_request)
 {
 	BufferMap buffers(std::move(completed_request->buffers));
 
+	// This function may run asynchronously so needs protection from the
+	// camera stopping at the same time.
+	std::lock_guard<std::mutex> stop_lock(camera_stop_mutex_);
+
+	// An application could be holding a CompletedRequest while it stops and re-starts
+	// the camera, after which we don't want to queue another request now.
+	bool request_found;
+	{
+		std::lock_guard<std::mutex> lock(completed_requests_mutex_);
+		auto it = completed_requests_.find(completed_request);
+		if (it != completed_requests_.end())
+		{
+			request_found = true;
+			completed_requests_.erase(it);
+		}
+		else
+			request_found = false;
+	}
+
 	Request *request = completed_request->request;
 	delete completed_request;
 	assert(request);
 
-	// This function may run asynchronously so needs protection from the
-	// camera stopping at the same time.
-	std::lock_guard<std::mutex> stop_lock(camera_stop_mutex_);
-	if (!camera_started_)
+	if (!camera_started_ || !request_found)
 		return;
-
-	// An application could be holding a CompletedRequest while it stops and re-starts
-	// the camera, after which we don't want to queue another request now.
-	{
-		std::lock_guard<std::mutex> lock(completed_requests_mutex_);
-		auto it = completed_requests_.find(completed_request);
-		if (it == completed_requests_.end())
-			return;
-		completed_requests_.erase(it);
-	}
 
 	for (auto const &p : buffers)
 	{
@@ -613,10 +768,15 @@ void LibcameraApp::ShowPreview(CompletedRequestPtr &completed_request, Stream *s
 	preview_cond_var_.notify_one();
 }
 
-void LibcameraApp::SetControls(ControlList &controls)
+void LibcameraApp::SetControls(const ControlList &controls)
 {
 	std::lock_guard<std::mutex> lock(control_mutex_);
-	controls_ = std::move(controls);
+
+	// Add new controls to the stored list. If a control is duplicated,
+	// the value in the argument replaces the previously stored value.
+	// These controls will be applied to the next StartCamera or request.
+	for (const auto &c : controls)
+		controls_.set(c.first, c.second);
 }
 
 StreamInfo LibcameraApp::GetStreamInfo(Stream const *stream) const
@@ -626,8 +786,8 @@ StreamInfo LibcameraApp::GetStreamInfo(Stream const *stream) const
 	info.width = cfg.size.width;
 	info.height = cfg.size.height;
 	info.stride = cfg.stride;
-	info.pixel_format = stream->configuration().pixelFormat;
-	info.colour_space = stream->configuration().colorSpace;
+	info.pixel_format = cfg.pixelFormat;
+	info.colour_space = cfg.colorSpace;
 	return info;
 }
 
@@ -639,19 +799,15 @@ void LibcameraApp::setupCapture()
 	if (validation == CameraConfiguration::Invalid)
 		throw std::runtime_error("failed to valid stream configurations");
 	else if (validation == CameraConfiguration::Adjusted)
-		std::cerr << "Stream configuration adjusted" << std::endl;
+		LOG(1, "Stream configuration adjusted");
 
 	if (camera_->configure(configuration_.get()) < 0)
 		throw std::runtime_error("failed to configure streams");
-	if (options_->verbose)
-		std::cerr << "Camera streams configured" << std::endl;
+	LOG(2, "Camera streams configured");
 
-	if (options_->verbose)
-	{
-		std::cerr << "Available controls:" << std::endl;
-		for (auto const &[id, info] : camera_->controls())
-			std::cerr << "    " << id->name() << " : " << info.toString() << std::endl;
-	}
+	LOG(2, "Available controls:");
+	for (auto const &[id, info] : camera_->controls())
+		LOG(2, "    " << id->name() << " : " << info.toString());
 
 	// Next allocate all the buffers we need, mmap them and store them on a free list.
 
@@ -683,12 +839,11 @@ void LibcameraApp::setupCapture()
 			frame_buffers_[stream].push(buffer.get());
 		}
 	}
-	if (options_->verbose)
-		std::cerr << "Buffers allocated and mapped" << std::endl;
+	LOG(2, "Buffers allocated and mapped");
 
 	startPreview();
 
-	// The requests will be made when Run() is called.
+	// The requests will be made when StartCamera() is called.
 }
 
 void LibcameraApp::makeRequests()
@@ -703,8 +858,7 @@ void LibcameraApp::makeRequests()
 			{
 				if (free_buffers[stream].empty())
 				{
-					if (options_->verbose)
-						std::cerr << "Requests created" << std::endl;
+					LOG(2, "Requests created");
 					return;
 				}
 				std::unique_ptr<Request> request = camera_->createRequest();
@@ -726,7 +880,14 @@ void LibcameraApp::makeRequests()
 void LibcameraApp::requestComplete(Request *request)
 {
 	if (request->status() == Request::RequestCancelled)
+	{
+		// If the request is cancelled while the camera is still running, it indicates
+		// a hardware timeout. Let the application handle this error.
+		if (camera_started_)
+			msg_queue_.Post(Msg(MsgType::Timeout));
+
 		return;
+	}
 
 	CompletedRequest *r = new CompletedRequest(sequence_++, request);
 	CompletedRequestPtr payload(r, [this](CompletedRequest *cr) { this->queueRequest(cr); });
@@ -738,9 +899,8 @@ void LibcameraApp::requestComplete(Request *request)
 	// We calculate the instantaneous framerate in case anyone wants it.
 	// Use the sensor timestamp if possible as it ought to be less glitchy than
 	// the buffer timestamps.
-	uint64_t timestamp = payload->metadata.contains(controls::SensorTimestamp)
-							? payload->metadata.get(controls::SensorTimestamp)
-							: payload->buffers.begin()->second->metadata().timestamp;
+	auto ts = payload->metadata.get(controls::SensorTimestamp);
+	uint64_t timestamp = ts ? *ts : payload->buffers.begin()->second->metadata().timestamp;
 	if (last_timestamp_ == 0 || last_timestamp_ == timestamp)
 		payload->framerate = 0;
 	else
@@ -761,11 +921,6 @@ void LibcameraApp::previewDoneCallback(int fd)
 
 void LibcameraApp::startPreview()
 {
-        if (is_preview_thread_active_) {
-          return;
-        }
-        is_preview_thread_active_ = true;
-
 	preview_abort_ = false;
 	preview_thread_ = std::thread(&LibcameraApp::previewThread, this);
 }
@@ -782,6 +937,7 @@ void LibcameraApp::stopPreview()
 	}
 	preview_thread_.join();
 	preview_item_ = PreviewItem();
+	preview_completed_requests_.clear();
 }
 
 void LibcameraApp::previewThread()
@@ -823,8 +979,7 @@ void LibcameraApp::previewThread()
 		}
 		if (preview_->Quit())
 		{
-			if (options_->verbose)
-				std::cerr << "Preview window has quit" << std::endl;
+			LOG(2, "Preview window has quit");
 			msg_queue_.Post(Msg(MsgType::Quit));
 		}
 		preview_frames_displayed_++;

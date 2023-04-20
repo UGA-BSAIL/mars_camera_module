@@ -9,7 +9,6 @@
 
 #include <sys/mman.h>
 
-#include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <memory>
@@ -27,6 +26,7 @@
 #include <libcamera/controls.h>
 #include <libcamera/formats.h>
 #include <libcamera/framebuffer_allocator.h>
+#include <libcamera/logging.h>
 #include <libcamera/property_ids.h>
 
 #include "core/completed_request.hpp"
@@ -35,6 +35,7 @@
 
 struct Options;
 class Preview;
+struct Mode;
 
 namespace controls = libcamera::controls;
 namespace properties = libcamera::properties;
@@ -60,7 +61,7 @@ public:
 	enum class MsgType
 	{
 		RequestComplete,
-                RequestTimeout,
+		Timeout,
 		Quit
 	};
 	typedef std::variant<CompletedRequestPtr> MsgPayload;
@@ -94,6 +95,7 @@ public:
 	Options *GetOptions() const { return options_.get(); }
 
 	std::string const &CameraId() const;
+	std::string CameraModel() const;
 	void OpenCamera();
 	void CloseCamera();
 
@@ -106,12 +108,12 @@ public:
 	void StopCamera();
 
 	Msg Wait();
-        template <class Rep, class Period>
-        Msg Wait(const std::chrono::duration<Rep, Period> &timeout) {
-          Msg message(MsgType::RequestTimeout);
-          msg_queue_.Wait(timeout, &message);
-          return message;
-        }
+    template <class Rep, class Period>
+    Msg Wait(const std::chrono::duration<Rep, Period> &timeout) {
+      Msg message(MsgType::Timeout);
+      msg_queue_.Wait(timeout, &message);
+      return message;
+    }
 	void PostMessage(MsgType &t, MsgPayload &p);
 
 	Stream *GetStream(std::string const &name, StreamInfo *info = nullptr) const;
@@ -126,8 +128,11 @@ public:
 
 	void ShowPreview(CompletedRequestPtr &completed_request, Stream *stream);
 
-	void SetControls(ControlList &controls);
+	void SetControls(const ControlList &controls);
 	StreamInfo GetStreamInfo(Stream const *stream) const;
+
+	static unsigned int verbosity;
+	static unsigned int GetVerbosity() { return verbosity; }
 
 protected:
 	std::unique_ptr<Options> options_;
@@ -148,21 +153,21 @@ private:
 		{
 			std::unique_lock<std::mutex> lock(mutex_);
 			cond_.wait(lock, [this] { return !queue_.empty(); });
-                        return GetNext();
-		}
-                template <class Rep, class Period>
-                bool Wait(const std::chrono::duration<Rep, Period> &timeout, T *msg) {
-                        std::unique_lock<std::mutex> lock(mutex_);
-                        if (!cond_.wait_for(lock, timeout, [this] {return !queue_.empty(); })) {
-                          // Wait timed out.
-                          return false;
-                        }
-                        *msg = GetNext();
-                        return true;
-                }
+            return GetNext();
+        }
+        template <class Rep, class Period>
+        bool Wait(const std::chrono::duration<Rep, Period> &timeout, T *msg) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            if (!cond_.wait_for(lock, timeout, [this] {return !queue_.empty(); })) {
+                // Wait timed out.
+                return false;
+            }
+            *msg = GetNext();
+            return true;
+        }
 		void Clear()
 		{
-                        std::unique_lock<std::mutex> lock(mutex_);
+			std::unique_lock<std::mutex> lock(mutex_);
 			queue_ = {};
 		}
 
@@ -171,15 +176,15 @@ private:
 		std::mutex mutex_;
 		std::condition_variable cond_;
 
-                /**
-                 * @brief Gets the next item from the queue without waiting.
-                 * @return The next item from the queue.
-                 */
-                T GetNext() {
-                        T msg = std::move(queue_.front());
-                        queue_.pop();
-                        return msg;
-                }
+        /**
+         * @brief Gets the next item from the queue without waiting.
+         * @return The next item from the queue.
+         */
+        T GetNext() {
+            T msg = std::move(queue_.front());
+            queue_.pop();
+            return msg;
+        }
 	};
 	struct PreviewItem
 	{
@@ -195,6 +200,31 @@ private:
 		CompletedRequestPtr completed_request;
 		Stream *stream;
 	};
+	struct SensorMode
+	{
+		SensorMode()
+			: size({}), format({}), fps(0)
+		{
+		}
+		SensorMode(libcamera::Size _size, libcamera::PixelFormat _format, double _fps)
+			: size(_size), format(_format), fps(_fps)
+		{
+		}
+		unsigned int depth() const
+		{
+			// This is a really ugly way of getting the bit depth of the format.
+			// But apart from duplicating the massive bayer format table, there is
+			// no other way to determine this.
+			std::string fmt = format.toString();
+			unsigned int mode_depth = fmt.find("8") != std::string::npos ? 8 :
+									  fmt.find("10") != std::string::npos ? 10 :
+									  fmt.find("12") != std::string::npos ? 12 : 16;
+			return mode_depth;
+		}
+		libcamera::Size size;
+		libcamera::PixelFormat format;
+		double fps;
+	};
 
 	void setupCapture();
 	void makeRequests();
@@ -205,6 +235,7 @@ private:
 	void stopPreview();
 	void previewThread();
 	void configureDenoise(const std::string &denoise_mode);
+	Mode selectModeForFramerate(const libcamera::Size &req, double fps);
 
 	std::unique_ptr<CameraManager> camera_manager_;
 	std::shared_ptr<Camera> camera_;
@@ -220,6 +251,7 @@ private:
 	bool camera_started_ = false;
 	std::mutex camera_stop_mutex_;
 	MessageQueue<Msg> msg_queue_;
+	std::vector<SensorMode> sensor_modes_;
 	// Related to the preview window.
 	std::unique_ptr<Preview> preview_;
 	std::map<int, CompletedRequestPtr> preview_completed_requests_;
@@ -238,6 +270,4 @@ private:
 	uint64_t last_timestamp_;
 	uint64_t sequence_ = 0;
 	PostProcessor post_processor_;
-        // Whether the preview thread is currently running.
-        bool is_preview_thread_active_ = false;
 };

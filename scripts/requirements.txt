@@ -1,3 +1,4 @@
 confuse
 loguru
 netifaces
+python-ffmpeg

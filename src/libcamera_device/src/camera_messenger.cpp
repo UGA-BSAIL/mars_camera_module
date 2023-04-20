@@ -124,7 +124,7 @@ bool CameraMessenger::WaitForFrame() {
   }
 
   LibcameraEncoder::Msg message = camera_app_->Wait(kCameraTimeout);
-  if (message.type == LibcameraEncoder::MsgType::RequestTimeout) {
+  if (message.type == LibcameraEncoder::MsgType::Timeout) {
     ROS_FATAL_STREAM(
         "Timed out while waiting for a frame. This is either a hardware issue, "
         "or a bug in libcamera.");

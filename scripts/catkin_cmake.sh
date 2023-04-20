@@ -6,6 +6,6 @@
 set -e
 
 # Load ROS environment.
-source /opt/ros/melodic/setup.bash
+source /opt/ros/noetic/setup.bash
 
 cmake "$@"
