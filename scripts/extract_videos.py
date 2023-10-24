@@ -15,7 +15,7 @@ import argparse
 import time
 import shutil
 import roslaunch
-from ffmpeg import FFmpeg, Progress
+from ffmpeg import FFmpeg, Progress, FFmpegError
 from loguru import logger
 
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
@@ -114,7 +114,7 @@ def _transcode_video(
     ffmpeg = (
         FFmpeg()
         .input(input_file.as_posix(), {"c:v": decoder, "framerate": 24})
-        .output(output_file.as_posix(), {"c:v": encoder, "b:v": bitrate})
+        .output(output_file.as_posix(), {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"})
     )
 
     @ffmpeg.on("stderr")
@@ -162,9 +162,13 @@ def _process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> 
         # Transcode those videos.
         for i, video_file in enumerate(sorted(video_dir.glob("*.h265"))):
             output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
-            _transcode_video(
-                input_file=video_file, output_file=output_file, **ffmpeg_kwargs
-            )
+            try:
+                _transcode_video(
+                    input_file=video_file, output_file=output_file, **ffmpeg_kwargs
+                )
+            except FFmpegError as err:
+                logger.error("FFMPeg failed, skipping:  {}", err)
+                continue
 
         # Copy timestamps as well.
         for i, ts_file in enumerate(sorted(video_dir.glob("*.txt"))):
