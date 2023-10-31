@@ -29,6 +29,21 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
 // stalled.
 const std::chrono::seconds kCameraTimeout(1000);
 
+/**
+ * @brief Converts a kernel timestamp to wall time.
+ * @param timestamp_us The kernel timestamp, in uS.
+ * @return The wall timestamp, in uS.
+ */
+uint64_t KernelToWallClock(uint32_t timestamp_us) {
+    // Figure out the conversion.
+    const auto kCurrentWallTime = std::chrono::system_clock::now();
+    const auto kCurrentKernelTime = std::chrono::steady_clock::now();
+    const auto kOffset = kCurrentWallTime.time_since_epoch() - kCurrentKernelTime.time_since_epoch();
+    const auto kUSecOffset = std::chrono::duration_cast<std::chrono::microseconds>(kOffset);
+
+    return static_cast<uint64_t>(timestamp_us) + kUSecOffset.count();
+}
+
 }  // namespace
 
 CameraMessenger::CameraMessenger(std::unique_ptr<LibcameraEncoder>&& camera_app,
@@ -53,8 +68,10 @@ void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
   // Create the message for this image.
   sensor_msgs::Image message;
 
-  message.header.stamp.sec = timestamp_us / 1000000;
-  message.header.stamp.nsec = (timestamp_us % 1000000) * 1000;
+  // Sensor timestamps are from the kernel clock, but we want them relative to the wall clock.
+  const uint64_t kWallTimestampUs = KernelToWallClock(timestamp_us);
+  message.header.stamp.sec = kWallTimestampUs / 1000000;
+  message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
   message.header.seq = message_sequence_++;
   message.header.frame_id = frame_id_;
 
