@@ -656,11 +656,17 @@ LibcameraApp::Msg LibcameraApp::Wait()
 
 void LibcameraApp::queueRequest(CompletedRequest *completed_request)
 {
-	BufferMap buffers(std::move(completed_request->buffers));
-
 	// This function may run asynchronously so needs protection from the
 	// camera stopping at the same time.
 	std::lock_guard<std::mutex> stop_lock(camera_stop_mutex_);
+
+    if (!camera_started_) {
+        // Camera was stopped, probably before we managed to grab the lock. In this case,
+        // completed_request is now invalid, so don't do anything.
+        return;
+    }
+
+    BufferMap buffers(std::move(completed_request->buffers));
 
 	// An application could be holding a CompletedRequest while it stops and re-starts
 	// the camera, after which we don't want to queue another request now.
