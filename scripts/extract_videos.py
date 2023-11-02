@@ -10,13 +10,14 @@ from pathlib import Path
 import signal
 import sys
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, List
 import argparse
 import time
 import shutil
 import roslaunch
 from ffmpeg import FFmpeg, Progress
 from loguru import logger
+import bagpy
 
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
 """
@@ -125,6 +126,27 @@ def _transcode_video(
     ffmpeg.execute()
 
 
+def _extract_topics(bag_file: Path, *, topics: List[str], output_base: Path) -> None:
+    """
+    Extracts additional topics from the bag file as CSV files.
+
+    Args:
+        bag_file: The bag file to read from.
+        topics: The topics to extract.
+        output_base: The output directory to write CSV files to.
+
+    """
+    reader = bagpy.bagreader(bag_file.as_posix(), tmp=True)
+
+    for topic in topics:
+        logger.info("Extracting data for {}...", topic)
+        topic_path = reader.message_by_topic(topic)
+
+        output_dir = output_base.parent
+        output_path = output_dir / f"{output_base.name}{topic.replace('/', '_')}.csv"
+        shutil.move(topic_path, output_path)
+
+
 def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> None:
     """
     Handler that should run when the program exits, and cleans everything up.
@@ -204,6 +226,14 @@ def _make_parser() -> argparse.ArgumentParser:
         default="24M",
     )
 
+    parser.add_argument(
+        "-t",
+        "--extra-topics",
+        nargs="+",
+        default=["/gps1/fix", "/gps2/fix"],
+        help="Additional topics to extract CSV data for."
+    )
+
     return parser
 
 
@@ -218,6 +248,14 @@ def main() -> None:
         decoder=cli_args.decoder,
         bitrate=cli_args.bitrate,
     )
+
+    if cli_args.extra_topics:
+        # Extract extra topics.
+        _extract_topics(
+            cli_args.bag_file,
+            topics=cli_args.extra_topics,
+            output_base=cli_args.output
+        )
 
 
 if __name__ == "__main__":

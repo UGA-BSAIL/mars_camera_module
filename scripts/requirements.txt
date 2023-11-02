@@ -2,3 +2,5 @@ confuse
 loguru
 netifaces
 python-ffmpeg
+bagpy
+numpy==1.24.4
