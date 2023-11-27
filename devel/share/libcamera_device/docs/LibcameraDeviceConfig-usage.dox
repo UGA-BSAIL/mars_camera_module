@@ -1,9 +1,0 @@
-\subsubsection usage Usage
-\verbatim
-<node name="libcamera_device_node" pkg="libcamera_device" type="libcamera_device_node">
-  <param name="fps" type="int" value="10" />
-  <param name="width" type="int" value="640" />
-  <param name="height" type="int" value="480" />
-</node>
-\endverbatim
-

@@ -1,8 +1,0 @@
-\subsubsection parameters ROS parameters
-
-Reads and maintains the following parameters on the ROS server
-
-- \b "~fps" : \b [int] The FPS to request from the camera min: 1, default: 10, max: 120
-- \b "~width" : \b [int] The width of the image to request from the camera min: 0, default: 640, max: 10000
-- \b "~height" : \b [int] The height of the image to request from the camera min: 0, default: 480, max: 10000
-
