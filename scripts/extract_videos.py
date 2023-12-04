@@ -7,7 +7,7 @@ This script handles extracting saved videos from rosbag files.
 
 from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import signal
 import sys
 from tempfile import TemporaryDirectory
@@ -165,7 +165,7 @@ def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> Non
     sys.exit()
 
 
-def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> None:
+def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> List[Path]:
     """
     Processes a bagfile, extracting and transcoding each video.
 
@@ -175,10 +175,14 @@ def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> N
             tacked onto the end for each individual camera video.
         **ffmpeg_kwargs: Will be forwarded to `_transcode_video`.
 
+    Returns:
+        The paths to the video files it extracted.
+
     """
     logger.info("Extracting videos from bagfile {}...", bag_file)
 
     # Extract raw videos to temporary files.
+    video_output_files = []
     with TemporaryDirectory() as video_dir:
         video_dir = Path(video_dir)
         logger.debug("Using temporary video directory {}.", video_dir)
@@ -188,6 +192,7 @@ def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> N
         # Transcode those videos.
         for i, video_file in enumerate(sorted(video_dir.glob("*.h265"))):
             output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
+            video_output_files.append(output_file)
             try:
                 _transcode_video(
                     input_file=video_file, output_file=output_file, **ffmpeg_kwargs
@@ -200,6 +205,8 @@ def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> N
         for i, ts_file in enumerate(sorted(video_dir.glob("*.txt"))):
             output_file = output_base.parent / f"{output_base.name}_cam{i}_ts.txt"
             shutil.copyfile(ts_file, output_file)
+
+        return video_output_files
 
 
 def _make_parser() -> argparse.ArgumentParser:
