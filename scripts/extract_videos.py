@@ -7,8 +7,9 @@ This script handles extracting saved videos from rosbag files.
 
 from functools import partial
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Callable
 import signal
+import json
 import sys
 from tempfile import TemporaryDirectory
 from typing import Any, List
@@ -16,7 +17,7 @@ import argparse
 import time
 import shutil
 import roslaunch
-from ffmpeg import FFmpeg, FFmpegError
+from ffmpeg import FFmpeg, FFmpegError, Progress
 from loguru import logger
 import bagpy
 
@@ -98,6 +99,34 @@ def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
     launcher.shutdown()
 
 
+def _find_video_length(video_path: Path, ffmpeg_exe: Optional[Path] = None) -> int:
+    """
+    Finds the number of frames in a video file.
+
+    Args:
+        video_path: The video to analyze.
+        ffmpeg_exe: Specify an executable to use for FFMpeg. Otherwise, it
+            will use the default one.
+
+    Returns:
+        The number of frames.
+
+    """
+    ffprobe_exe = "ffprobe"
+    if ffmpeg_exe is not None:
+        # Assume that ffprobe is in the same directory.
+        ffprobe_exe = (ffmpeg_exe.parent / "ffprobe").as_posix()
+        logger.debug("Using FFProbe executable: {}", ffprobe_exe)
+    ffprobe = FFmpeg(ffprobe_exe).input(
+        video_path.as_posix(), print_format="json", show_streams=None
+    )
+
+    video_data = json.loads(ffprobe.execute())
+    logger.debug("Got ffprobe output: {}", video_data)
+
+    return video_data["streams"][0]["nb_frames"]
+
+
 def _transcode_video(
     *,
     input_file: Path,
@@ -106,6 +135,7 @@ def _transcode_video(
     encoder: str = "h264",
     decoder: str = "h264",
     bitrate: str = "24M",
+    on_progress: Optional[Callable[[float], None]],
 ) -> None:
     """
     Transcodes an extracted video.
@@ -118,8 +148,13 @@ def _transcode_video(
         encoder: The FFmpeg encoder to use.
         decoder: The FFmpeg decoder to use.
         bitrate: The bitrate to output transcoded videos at.
+        on_progress: Callback to run whenever we make progress in the
+            transcode. Will be called with the current fractional completion.
 
     """
+    # Figure out how many frames there are in the video.
+    num_frames = _find_video_length(input_file, ffmpeg_exe=ffmpeg_exe)
+
     logger.info("Transcoding {} to {}...", input_file, output_file)
     ffmpeg = (
         FFmpeg(ffmpeg_exe.as_posix() if ffmpeg_exe else "ffmpeg")
@@ -134,6 +169,15 @@ def _transcode_video(
     def _on_stderr(line: str) -> None:
         # Log this for debugging.
         logger.debug("ffmpeg: {}", line)
+
+    @ffmpeg.on("progress")
+    def _on_progress(progress: Progress) -> None:
+        if not on_progress:
+            return
+
+        # Run the callback.
+        fraction_done = progress.frame / num_frames
+        on_progress(fraction_done)
 
     ffmpeg.execute()
 
@@ -177,7 +221,13 @@ def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> Non
     sys.exit()
 
 
-def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> List[Path]:
+def process_bag(
+    *,
+    bag_file: Path,
+    output_base: Path,
+    on_progress: Optional[Callable[[float], None]] = None,
+    **ffmpeg_kwargs: Any,
+) -> List[Path]:
     """
     Processes a bagfile, extracting and transcoding each video.
 
@@ -185,6 +235,8 @@ def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> L
         bag_file: The input bagfile.
         output_base: The base name for the outputs. "_cam0", "_cam1", etc. will be
             tacked onto the end for each individual camera video.
+        on_progress: Callback to run whenever we make progress in the
+            transcode. Will be called with the current fractional completion.
         **ffmpeg_kwargs: Will be forwarded to `_transcode_video`.
 
     Returns:
@@ -201,13 +253,26 @@ def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> L
 
         _split_bag(bag_file=bag_file, output_dir=video_dir)
 
+        video_files = sorted(video_dir.glob("*.h265"))
+
+        def _on_progress(fraction_done: float, video_index: int) -> None:
+            if on_progress is None:
+                return
+            # We have to translate per-video progress into global progress.
+            previous_video_fraction = 1.0 / len(video_files) * video_index
+            fraction_done = previous_video_fraction + fraction_done / len(video_files)
+            on_progress(fraction_done)
+
         # Transcode those videos.
-        for i, video_file in enumerate(sorted(video_dir.glob("*.h265"))):
+        for i, video_file in enumerate(video_files):
             output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
             video_output_files.append(output_file)
             try:
                 _transcode_video(
-                    input_file=video_file, output_file=output_file, **ffmpeg_kwargs
+                    input_file=video_file,
+                    output_file=output_file,
+                    on_progress=partial(_on_progress, i),
+                    **ffmpeg_kwargs,
                 )
             except FFmpegError as err:
                 logger.error("FFMPeg failed, skipping: {}", err)
