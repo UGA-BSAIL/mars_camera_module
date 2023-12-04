@@ -7,6 +7,7 @@ This script handles extracting saved videos from rosbag files.
 
 from functools import partial
 from pathlib import Path
+from typing import Optional
 import signal
 import sys
 from tempfile import TemporaryDirectory
@@ -15,7 +16,7 @@ import argparse
 import time
 import shutil
 import roslaunch
-from ffmpeg import FFmpeg, Progress, FFmpegError
+from ffmpeg import FFmpeg, FFmpegError
 from loguru import logger
 import bagpy
 
@@ -96,6 +97,7 @@ def _transcode_video(
     *,
     input_file: Path,
     output_file: Path,
+    ffmpeg_exe: Optional[Path] = None,
     encoder: str = "h264",
     decoder: str = "h264",
     bitrate: str = "24M",
@@ -106,6 +108,8 @@ def _transcode_video(
     Args:
         input_file: The raw extracted video.
         output_file: The desired output file.
+        ffmpeg_exe: Specify an executable to use for FFMpeg. Otherwise, it
+            will use the default one.
         encoder: The FFmpeg encoder to use.
         decoder: The FFmpeg decoder to use.
         bitrate: The bitrate to output transcoded videos at.
@@ -113,7 +117,7 @@ def _transcode_video(
     """
     logger.info("Transcoding {} to {}...", input_file, output_file)
     ffmpeg = (
-        FFmpeg()
+        FFmpeg(ffmpeg_exe.as_posix() if ffmpeg_exe else "ffmpeg")
         .input(input_file.as_posix(), {"c:v": decoder, "framerate": 24})
         .output(output_file.as_posix(), {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"})
     )
@@ -161,7 +165,7 @@ def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> Non
     sys.exit()
 
 
-def _process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> None:
+def process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> None:
     """
     Processes a bagfile, extracting and transcoding each video.
 
@@ -189,7 +193,7 @@ def _process_bag(*, bag_file: Path, output_base: Path, **ffmpeg_kwargs: Any) -> 
                     input_file=video_file, output_file=output_file, **ffmpeg_kwargs
                 )
             except FFmpegError as err:
-                logger.error("FFMPeg failed, skipping:  {}", err)
+                logger.error("FFMPeg failed, skipping: {}", err)
                 continue
 
         # Copy timestamps as well.
@@ -245,7 +249,7 @@ def main() -> None:
     parser = _make_parser()
     cli_args = parser.parse_args()
 
-    _process_bag(
+    process_bag(
         bag_file=cli_args.bag_file,
         output_base=cli_args.output,
         encoder=cli_args.encoder,
