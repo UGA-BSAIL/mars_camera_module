@@ -5,22 +5,23 @@
 This script handles extracting saved videos from rosbag files.
 """
 
+import argparse
+import shutil
+import signal
+import sys
+import time
 from functools import partial
 from pathlib import Path
-from typing import Optional, List, Callable
-import signal
-import json
-import sys
 from tempfile import TemporaryDirectory
-from typing import Any, List
-import argparse
-import time
-import shutil
+from typing import Any, Callable, List, Optional
+
+import bagpy
+import pandas as pd
 import roslaunch
 from ffmpeg import FFmpeg, FFmpegError, Progress
 from loguru import logger
-import bagpy
-import pandas as pd
+
+from .launch_manager import LaunchManager
 
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
 """
@@ -28,35 +29,9 @@ Launch file to use for extracting video data from the bag files.
 """
 
 
-class ProcessListener(roslaunch.pmon.ProcessListener):
-    """
-    Listens to the status of ROS processes to determine when we should exit.
-    """
-
-    def __init__(self):
-        # Indicates whether all processes have exited.
-        self.__all_finished = False
-        self.__exited_with_error = False
-
-    def process_died(self, name: str, exit_code: Optional[int]) -> None:
-        logger.debug("Process {} exited with code {}", name, exit_code)
-        self.__all_finished = True
-        if exit_code != 0:
-            self.__exited_with_error = True
-
-    @property
-    def all_finished(self) -> bool:
-        """
-        Returns:
-            True if all processes have finished.
-
-        """
-        if self.__exited_with_error:
-            raise OSError("Monitored process exited with an error.")
-        return self.__all_finished
-
-
-def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
+def _split_bag(
+    *, bag_file: Path, output_dir: Path, handle_signals: bool = True
+) -> None:
     """
     Splits the video data out of the bag file.
 
@@ -64,40 +39,31 @@ def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
         bag_file: The bag file to split data from.
         output_dir: The directory to write output to. Output will be
             written to files named "camera_x" for each camera.
+        handle_signals: If true, add handlers for SIGTERM and SIGINT so that
+            it remains responsive to the user.
 
     """
     out_file_base = output_dir / "camera_"
 
     # Start the node.
-    launch_file = roslaunch.rlutil.resolve_launch_arguments(SPLIT_BAG_LAUNCH)[0]
-    uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-    listener = ProcessListener()
-    launcher = roslaunch.parent.ROSLaunchParent(
-        uuid,
-        [
-            (
-                launch_file,
-                [
-                    f"bag:={bag_file.absolute().as_posix()}",
-                    f"out_file_base:={out_file_base.absolute().as_posix()}",
-                    "write_time_stamps:=true",
-                ],
-            )
+    launcher = LaunchManager(
+        SPLIT_BAG_LAUNCH,
+        ros_args=[
+            f"bag:={bag_file.absolute().as_posix()}",
+            f"out_file_base:={out_file_base.absolute().as_posix()}",
+            "write_time_stamps:=true",
         ],
-        process_listeners=[listener],
     )
     launcher.start()
 
     # Run a handler when we exit to stop ROS.
-    handler = partial(_on_program_exit, launcher)
-    signal.signal(signal.SIGINT, handler)
-    signal.signal(signal.SIGTERM, handler)
+    if handle_signals:
+        handler = partial(_on_program_exit, launcher)
+        signal.signal(signal.SIGINT, handler)
+        signal.signal(signal.SIGTERM, handler)
 
     # Wait for it to finish.
-    while not listener.all_finished:
-        time.sleep(0.01)
-        launcher.spin_once()
-    launcher.shutdown()
+    launcher.wait()
 
 
 def _find_video_length(video_path: Path) -> int:
@@ -192,7 +158,7 @@ def _extract_topics(bag_file: Path, *, topics: List[str], output_base: Path) -> 
 
         if topic_path is None:
             logger.warning("Topic {} not found in bag, skipping.", topic)
-            continue 
+            continue
 
         output_dir = output_base.parent
         output_path = output_dir / f"{output_base.name}{topic.replace('/', '_')}.csv"
@@ -218,6 +184,7 @@ def process_bag(
     bag_file: Path,
     output_base: Path,
     on_progress: Optional[Callable[[float], None]] = None,
+    handle_signals: bool = True,
     **ffmpeg_kwargs: Any,
 ) -> List[Path]:
     """
@@ -229,6 +196,8 @@ def process_bag(
             tacked onto the end for each individual camera video.
         on_progress: Callback to run whenever we make progress in the
             transcode. Will be called with the current fractional completion.
+        handle_signals: If true, add handlers for SIGTERM and SIGINT so that
+            it remains responsive to the user.
         **ffmpeg_kwargs: Will be forwarded to `_transcode_video`.
 
     Returns:
@@ -243,7 +212,9 @@ def process_bag(
         video_dir = Path(video_dir)
         logger.debug("Using temporary video directory {}.", video_dir)
 
-        _split_bag(bag_file=bag_file, output_dir=video_dir)
+        _split_bag(
+            bag_file=bag_file, output_dir=video_dir, handle_signals=handle_signals
+        )
 
         video_files = sorted(video_dir.glob("*.h265"))
 
