@@ -4,3 +4,4 @@ netifaces
 python-ffmpeg
 bagpy
 numpy==1.24.4
+pandas

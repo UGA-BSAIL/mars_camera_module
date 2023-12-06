@@ -20,6 +20,7 @@ import roslaunch
 from ffmpeg import FFmpeg, FFmpegError, Progress
 from loguru import logger
 import bagpy
+import pandas as pd
 
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
 """
@@ -99,32 +100,23 @@ def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
     launcher.shutdown()
 
 
-def _find_video_length(video_path: Path, ffmpeg_exe: Optional[Path] = None) -> int:
+def _find_video_length(video_path: Path) -> int:
     """
     Finds the number of frames in a video file.
 
     Args:
         video_path: The video to analyze.
-        ffmpeg_exe: Specify an executable to use for FFMpeg. Otherwise, it
-            will use the default one.
 
     Returns:
         The number of frames.
 
     """
-    ffprobe_exe = "ffprobe"
-    if ffmpeg_exe is not None:
-        # Assume that ffprobe is in the same directory.
-        ffprobe_exe = (ffmpeg_exe.parent / "ffprobe").as_posix()
-        logger.debug("Using FFProbe executable: {}", ffprobe_exe)
-    ffprobe = FFmpeg(ffprobe_exe).input(
-        video_path.as_posix(), print_format="json", show_streams=None
-    )
+    # Find the timestamps file.
+    timestamp_path = video_path.parent / f"{video_path.stem}_ts.txt"
+    logger.debug("Reading data from timestamp file: {}", timestamp_path)
+    timestamp_data = pd.read_csv(timestamp_path, sep=" ", header=None)
 
-    video_data = json.loads(ffprobe.execute())
-    logger.debug("Got ffprobe output: {}", video_data)
-
-    return video_data["streams"][0]["nb_frames"]
+    return timestamp_data.index[-1]
 
 
 def _transcode_video(
@@ -153,7 +145,7 @@ def _transcode_video(
 
     """
     # Figure out how many frames there are in the video.
-    num_frames = _find_video_length(input_file, ffmpeg_exe=ffmpeg_exe)
+    num_frames = _find_video_length(input_file)
 
     logger.info("Transcoding {} to {}...", input_file, output_file)
     ffmpeg = (
