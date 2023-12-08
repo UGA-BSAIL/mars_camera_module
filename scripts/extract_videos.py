@@ -13,13 +13,13 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Any, List
 import argparse
-import time
 import shutil
 import roslaunch
 from ffmpeg import FFmpeg, FFmpegError, Progress
 from loguru import logger
 import bagpy
 import pandas as pd
+from pandas.errors import EmptyDataError
 
 from .launch_manager import LaunchManager
 
@@ -81,7 +81,14 @@ def _find_video_length(video_path: Path) -> int:
     # Find the timestamps file.
     timestamp_path = video_path.parent / f"{video_path.stem}_ts.txt"
     logger.debug("Reading data from timestamp file: {}", timestamp_path)
-    timestamp_data = pd.read_csv(timestamp_path, sep=" ", header=None)
+    try:
+        timestamp_data = pd.read_csv(timestamp_path, sep=" ", header=None)
+    except EmptyDataError:
+        logger.warning("No timestamp data found in {}", timestamp_path)
+        # Return some really big number here. Since this is in the
+        # denominator for progress calculations, it will effectively always
+        # make it look like we have 0 progress.
+        return sys.maxsize
 
     return timestamp_data.index[-1]
 
