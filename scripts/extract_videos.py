@@ -215,7 +215,7 @@ def process_bag(
 
     # Extract raw videos to temporary files.
     video_output_files = []
-    with TemporaryDirectory() as video_dir:
+    with TemporaryDirectory(dir=output_base.parent, prefix=".videos_") as video_dir:
         video_dir = Path(video_dir)
         logger.debug("Using temporary video directory {}.", video_dir)
 
