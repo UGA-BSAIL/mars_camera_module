@@ -3,12 +3,21 @@ Handles running launch files.
 """
 
 
-from concurrent.futures import ProcessPoolExecutor, wait
-from typing import Tuple, List
+from multiprocessing import Event, Process
+from typing import Tuple, List, Optional
 import time
 
 from loguru import logger
 import roslaunch
+
+
+_UUID = roslaunch.rlutil.get_or_generate_uuid(
+    options_runid=None, options_wait_for_master=True
+)
+"""
+UUID to use for launch files.
+"""
+roslaunch.configure_logging(_UUID)
 
 
 class ProcessListener(roslaunch.pmon.ProcessListener):
@@ -34,29 +43,41 @@ class ProcessListener(roslaunch.pmon.ProcessListener):
         return self.__all_finished
 
 
-def _run_launch(launch_file: Tuple[str, str], ros_args: List[str] = []) -> None:
+def _run_launch(
+    launch_file: Tuple[str, str],
+    *,
+    ros_args: List[str] = [],
+    started_event: Event,
+    stop_event: Optional[Event] = None
+) -> None:
     """
     Runs a launch file.
 
     Args:
         launch_file: The launch file to run.
         ros_args: The list of arguments to pass to ROS.
+        started_event: Event that will be set when the launch file has started.
+        stop_event: If present, will check whether this event is set, and if so,
+            will stop roslaunch prematurely.
 
     """
     launch_file = roslaunch.rlutil.resolve_launch_arguments(launch_file)[0]
-    uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
     listener = ProcessListener()
     launcher = roslaunch.parent.ROSLaunchParent(
-        uuid,
+        _UUID,
         [(launch_file, ros_args)],
         process_listeners=[listener],
     )
     launcher.start()
+    started_event.set()
 
     # Wait for it to finish.
     while not listener.all_finished:
         time.sleep(0.1)
+        if stop_event is not None and stop_event.is_set():
+            break
         launcher.spin_once()
+
     launcher.shutdown()
 
 
@@ -75,30 +96,59 @@ class LaunchManager:
         self.__launch_file = launch_file
         self.__ros_args = ros_args
 
-        # Internal pool used for running launch files in a separate process.
+        # Runs launch files in a separate process.
         # This gets around some issues with roslaunch and threading.
-        self.__pool = ProcessPoolExecutor(max_workers=1)
-        # Future representing the launch file.
-        self.__future = None
+        self.__process = None
+
+        # Internal event that can be set to indicate that the launch file
+        # should be stopped.
+        self.__stop_event = Event()
 
     def start(self) -> None:
         """
         Starts the launch file.
 
         """
+        # Event that's triggered once roslaunch has fully initialized.
+        started_event = Event()
+
         logger.info("Running launch file {}...", self.__launch_file)
-        self.__future = self.__pool.submit(
-            _run_launch, self.__launch_file, self.__ros_args
+        self.__process = Process(
+            target=_run_launch,
+            args=(self.__launch_file,),
+            kwargs=dict(
+                ros_args=self.__ros_args,
+                started_event=started_event,
+                stop_event=self.__stop_event,
+            ),
         )
+        self.__process.start()
+
+        # Wait for it to start before returning.
+        started_event.wait()
+        logger.debug("Launch file is now running.")
 
     def wait(self) -> None:
         """
         Waits until the launch file has finished executing.
 
         """
-        if self.__future is None:
+        if self.__process is None:
             # No launch file to wait for.
             return
 
-        wait([self.__future])
+        self.__process.join()
+        self.__process = None
         logger.debug("Done running launch file {}.", self.__launch_file)
+
+    def stop(self) -> None:
+        """
+        Stops the launch file.
+
+        """
+        if self.__process is None:
+            # No launch file to stop.
+            return
+
+        logger.info("Stopping launch file {}...", self.__launch_file)
+        self.__stop_event.set()
