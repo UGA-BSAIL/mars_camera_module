@@ -102,7 +102,7 @@ class LaunchManager:
 
         # Internal event that can be set to indicate that the launch file
         # should be stopped.
-        self.__stop_event = Event()
+        self.__stop_event = None
 
     def start(self) -> None:
         """
@@ -111,6 +111,7 @@ class LaunchManager:
         """
         # Event that's triggered once roslaunch has fully initialized.
         started_event = Event()
+        self.__stop_event = Event()
 
         logger.info("Running launch file {}...", self.__launch_file)
         self.__process = Process(
