@@ -181,12 +181,15 @@ void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) {
   options->nopreview = new_options.nopreview;
   options->denoise = new_options.denoise;
   options->codec = new_options.codec;
+  options->ev = new_options.ev;
   options->brightness = new_options.brightness;
   options->contrast = new_options.contrast;
   options->saturation = new_options.saturation;
   options->sharpness = new_options.sharpness;
   options->framerate = new_options.framerate;
   options->mode = new_options.mode;
+  options->width = new_options.width;
+  options->height = new_options.height;
 }
 
 }  // namespace libcamera_device

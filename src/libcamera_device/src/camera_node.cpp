@@ -61,6 +61,8 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->framerate = static_cast<float>(dynamic_config.fps);
   out_config->mode =
       Mode(dynamic_config.width, dynamic_config.height, 24, false);
+  out_config->width = dynamic_config.width;
+  out_config->height = dynamic_config.height;
 
   out_config->camera = static_config.device_id;
 
@@ -72,10 +74,11 @@ void ParamToVideoConfig(const StaticConfig static_config,
   // This just outputs the raw image data with no encoding.
   out_config->codec = "yuv420";
 
+  out_config->ev = static_cast<float>(dynamic_config.ev);
   out_config->brightness = 0.0;
-  out_config->contrast = 1.0;
-  out_config->saturation = 1.0;
-  out_config->sharpness = 1.0;
+  out_config->contrast = static_cast<float>(dynamic_config.contrast);
+  out_config->saturation = static_cast<float>(dynamic_config.saturation);
+  out_config->sharpness = static_cast<float>(dynamic_config.sharpness);
 }
 
 /**

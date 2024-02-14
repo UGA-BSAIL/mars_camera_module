@@ -92,7 +92,7 @@ struct Options
 			 "Set a fixed shutter speed in microseconds")
 			("analoggain", value<float>(&gain)->default_value(0),
 			 "Set a fixed gain value (synonym for 'gain' option)")
-			("gain", value<float>(&gain),
+			("gain", value<float>(&gain)->default_value(0),
 			 "Set a fixed gain value")
 			("metering", value<std::string>(&metering)->default_value("centre"),
 			 "Set the metering mode (centre, spot, average, custom)")
