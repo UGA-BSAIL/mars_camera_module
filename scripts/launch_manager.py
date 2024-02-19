@@ -68,7 +68,11 @@ def _run_launch(
         [(launch_file, ros_args)],
         process_listeners=[listener],
     )
-    launcher.start()
+    try:
+        launcher.start()
+    except roslaunch.core.RLException:
+        logger.warning("Cannot start launch file {} because manager has "
+                       "already exited.", launch_file)
     started_event.set()
 
     # Wait for it to finish.
@@ -136,6 +140,11 @@ class LaunchManager:
         """
         if self.__process is None:
             # No launch file to wait for.
+            return
+        if not self.__process.is_alive():
+            # Already finished.
+            logger.info("Process for {} already exited.", self.__launch_file)
+            self.__process = None
             return
 
         self.__process.join()
