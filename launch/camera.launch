@@ -2,6 +2,8 @@
 <launch>
     <!-- The name to use for the camera node. -->
     <arg name="node_name" default="camera"/>
+    <!-- The frame ID to use for the camera. -->
+    <arg name="frame_id" default="frame"/>
 
     <include file="$(find libcamera_device)/launch/full_hd_video.launch">
             <arg name="node_name" value="$(arg node_name)" />

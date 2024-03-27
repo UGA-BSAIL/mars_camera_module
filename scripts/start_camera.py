@@ -69,11 +69,12 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
     # Start the node.
     launch_file = config["launch_file"].as_path()
     node_name = config["node_name"].as_str()
+    frame_id = config["frame_id"].as_str()
     logger.info("Launching {}...", launch_file)
 
     launch_file = roslaunch.rlutil.resolve_launch_arguments((launch_file.as_posix(), "--wait"))[0]
     uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-    launcher = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file, [f"node_name:={node_name}"])])
+    launcher = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file, [f"node_name:={node_name}", f"frame_id:={frame_id}"])])
     launcher.start()
 
     return launcher

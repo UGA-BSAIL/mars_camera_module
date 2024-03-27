@@ -8,7 +8,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 
-#include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <string>
@@ -103,7 +103,15 @@ void ReconfigureParams(CameraMessenger *messenger,
   // Camera needs to be restarted for these to take effect.
   messenger->Stop();
   messenger->ConfigureOptions(camera_options);
-  messenger->Start();
+
+  try {
+      messenger->Start();
+  } catch (const std::runtime_error &e) {
+      ROS_FATAL_STREAM("Failed to start camera: " << e.what());
+      // There's no easy way to recover from this. The best policy is to exit
+      // and let systemd restart.
+      exit(1);
+  }
 }
 
 /**
