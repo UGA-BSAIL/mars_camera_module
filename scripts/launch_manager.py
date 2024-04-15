@@ -61,6 +61,7 @@ def _run_launch(
             will stop roslaunch prematurely.
 
     """
+    logger.info("Entered _run_launch.")
     launch_file = roslaunch.rlutil.resolve_launch_arguments(launch_file)[0]
     listener = ProcessListener()
     launcher = roslaunch.parent.ROSLaunchParent(
@@ -68,6 +69,7 @@ def _run_launch(
         [(launch_file, ros_args)],
         process_listeners=[listener],
     )
+    logger.info("Created launch parent.")
     try:
         launcher.start()
     except roslaunch.core.RLException:
@@ -76,6 +78,7 @@ def _run_launch(
     started_event.set()
 
     # Wait for it to finish.
+    logger.info("Waiting for launch file exit...")
     while not listener.all_finished:
         time.sleep(0.1)
         if stop_event is not None and stop_event.is_set():
@@ -127,9 +130,11 @@ class LaunchManager:
                 stop_event=self.__stop_event,
             ),
         )
+        logger.info("Starting process.")
         self.__process.start()
 
         # Wait for it to start before returning.
+        logger.info("Waiting for process start...")
         started_event.wait()
         logger.debug("Launch file is now running.")
 
