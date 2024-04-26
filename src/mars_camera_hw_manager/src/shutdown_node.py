@@ -17,7 +17,7 @@ def main():
     rospy.init_node("camera_shutdown", anonymous=True)
 
     # Get the camera name to use.
-    camera_id = rospy.get_param("camera_id", "camera")
+    camera_id = rospy.get_param("~camera_id", "camera")
 
     # Publish the control message.
     topic = "/" + camera_id + "/control"

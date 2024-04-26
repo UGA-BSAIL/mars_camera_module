@@ -2,13 +2,16 @@
 <launch>
     <!-- The name to use for the camera node. -->
     <arg name="node_name" default="camera"/>
+    <!-- The frame ID to use for camera messages. -->
+    <arg name="frame_id" default="frame"/>
 
-    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true">
+    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
         <param name="fps" value="30"/>
         <param name="width" value="1920"/>
         <param name="height" value="1080"/>
+        <param name="frame_id" value="$(arg frame_id)"/>
     </node>
 </launch>

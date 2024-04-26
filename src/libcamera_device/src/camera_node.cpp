@@ -147,7 +147,7 @@ void WaitForSubscriber(const Publisher &publisher, const ros::NodeHandle &node,
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "camera", ros::init_options::AnonymousName);
-  ros::NodeHandle node;
+  ros::NodeHandle node("~");
 
   // Read parameters.
   std::string camera_name, frame_id;
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
   node.param<std::string>("frame_id", frame_id, "frame");
   node.param<int32_t>("device_id", device_id, 0);
 
-  ROS_INFO_STREAM("Starting camera node...");
+  ROS_INFO_STREAM("Starting camera node for device " << device_id << " and frame " << frame_id << "...");
 
   ImageTransport image_transport(node);
   auto image_publisher =
