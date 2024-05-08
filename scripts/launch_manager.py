@@ -73,8 +73,11 @@ def _run_launch(
     try:
         launcher.start()
     except roslaunch.core.RLException:
-        logger.warning("Cannot start launch file {} because manager has "
-                       "already exited.", launch_file)
+        logger.warning(
+            "Cannot start launch file {} because manager has "
+            "already exited.",
+            launch_file,
+        )
     started_event.set()
 
     # Wait for it to finish.
@@ -120,23 +123,31 @@ class LaunchManager:
         started_event = Event()
         self.__stop_event = Event()
 
-        logger.info("Running launch file {}...", self.__launch_file)
-        self.__process = Process(
-            target=_run_launch,
-            args=(self.__launch_file,),
-            kwargs=dict(
-                ros_args=self.__ros_args,
-                started_event=started_event,
-                stop_event=self.__stop_event,
-            ),
-        )
-        logger.info("Starting process.")
-        self.__process.start()
+        successfully_started = False
+        while not successfully_started:
+            logger.info("Running launch file {}...", self.__launch_file)
+            self.__process = Process(
+                target=_run_launch,
+                args=(self.__launch_file,),
+                kwargs=dict(
+                    ros_args=self.__ros_args,
+                    started_event=started_event,
+                    stop_event=self.__stop_event,
+                ),
+            )
+            logger.info("Starting process.")
+            self.__process.start()
 
-        # Wait for it to start before returning.
-        logger.info("Waiting for process start...")
-        started_event.wait()
-        logger.debug("Launch file is now running.")
+            # Wait for it to start before returning.
+            logger.info("Waiting for process start...")
+            successfully_started = started_event.wait(timeout=10)
+            if not successfully_started:
+                logger.warning(
+                    "Launch file did not start properly. Retrying..."
+                )
+                self.__process.kill()
+            else:
+                logger.debug("Launch file is now running.")
 
     def wait(self) -> None:
         """
