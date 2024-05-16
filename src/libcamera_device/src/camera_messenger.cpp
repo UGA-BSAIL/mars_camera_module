@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <limits>
 #include <map>
 #include <utility>
 
@@ -30,28 +31,43 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
 const std::chrono::seconds kCameraTimeout(1000);
 
 /**
- * @brief Converts a kernel timestamp to wall time.
+ * @brief Converts a kernel timestamp to ROS time.
  * @param timestamp_us The kernel timestamp, in uS.
- * @return The wall timestamp, in uS.
+ * @return The ROS timestamp, in uS.
  */
-uint64_t KernelToWallClock(uint32_t timestamp_us) {
-    // Figure out the conversion.
-    const auto kCurrentWallTime = std::chrono::system_clock::now();
-    const auto kCurrentKernelTime = std::chrono::steady_clock::now();
-    const auto kOffset = kCurrentWallTime.time_since_epoch() - kCurrentKernelTime.time_since_epoch();
-    const auto kUSecOffset = std::chrono::duration_cast<std::chrono::microseconds>(kOffset);
+uint64_t KernelToRosClock(uint32_t timestamp_us) {
+  // Figure out the conversion.
+  const auto kCurrentRosTime = ros::Time::now();
+  const auto kCurrentKernelTime = std::chrono::steady_clock::now();
+  const auto kOffset = std::chrono::nanoseconds{kCurrentRosTime.toNSec()} -
+                       kCurrentKernelTime.time_since_epoch();
+  const auto kUSecOffset =
+      std::chrono::duration_cast<std::chrono::microseconds>(kOffset);
 
-    return static_cast<uint64_t>(timestamp_us) + kUSecOffset.count();
+  // One of the joys of Libcamera is that it provides the timestamp as a 32-bit
+  // integer, which means that it wraps after the camera has been running for
+  // more than an hour or so. We handle this by using the kernel time to compute
+  // the number of times it has wrapped.
+  constexpr uint32_t kMaxSensorTime = std::numeric_limits<uint32_t>::max();
+  const uint64_t kNumWraps =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          kCurrentKernelTime.time_since_epoch())
+          .count() /
+      kMaxSensorTime;
+  const uint64_t kUnwrappedSensorTime =
+      kNumWraps * kMaxSensorTime + static_cast<uint64_t>(timestamp_us);
+
+  return kUnwrappedSensorTime + kUSecOffset.count();
 }
 
 }  // namespace
 
-CameraMessenger::CameraMessenger(std::unique_ptr<LibcameraEncoder>&& camera_app,
+CameraMessenger::CameraMessenger(std::unique_ptr<LibcameraEncoder> &&camera_app,
                                  std::string frame_id,
-                                 const VideoOptions& options)
+                                 const VideoOptions &options)
     : camera_app_(std::move(camera_app)),
       frame_id_(std::move(frame_id)),
-      on_message_ready_([](const sensor_msgs::Image&) {
+      on_message_ready_([](const sensor_msgs::Image &) {
         // Default callback does nothing, but logs a warning.
         ROS_WARN_STREAM("Got a camera message, but no callback is registered.");
       }) {
@@ -63,13 +79,14 @@ CameraMessenger::~CameraMessenger() {
   Stop();
 }
 
-void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
+void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
                                        int64_t timestamp_us, uint32_t) {
   // Create the message for this image.
   sensor_msgs::Image message;
 
-  // Sensor timestamps are from the kernel clock, but we want them relative to the wall clock.
-  const uint64_t kWallTimestampUs = KernelToWallClock(timestamp_us);
+  // Sensor timestamps are from the kernel clock, but we want them relative to
+  // the wall clock.
+  const uint64_t kWallTimestampUs = KernelToRosClock(timestamp_us);
   message.header.stamp.sec = kWallTimestampUs / 1000000;
   message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
   message.header.seq = message_sequence_++;
@@ -83,7 +100,7 @@ void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
 
   // I don't get why people still use void pointers in the Year of Our Lord
   // 2022...
-  const uint8_t* byte_buffer = static_cast<uint8_t*>(buffer);
+  const uint8_t *byte_buffer = static_cast<uint8_t *>(buffer);
   // Copy raw image data.
   message.data.assign(byte_buffer, byte_buffer + buffer_size);
 
@@ -92,7 +109,7 @@ void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
 }
 
 void CameraMessenger::SetMessageReadyCallback(
-    const CameraMessenger::MessageReadyCallback& callback) {
+    const CameraMessenger::MessageReadyCallback &callback) {
   ROS_DEBUG_STREAM("Setting new callback for camera messages.");
   on_message_ready_ = callback;
 }
@@ -157,7 +174,7 @@ bool CameraMessenger::WaitForFrame() {
       "Got unrecognized message type " << static_cast<uint32_t>(message.type)
                                        << " from LibCamera!");
 
-  auto& completed_request = std::get<CompletedRequestPtr>(message.payload);
+  auto &completed_request = std::get<CompletedRequestPtr>(message.payload);
   camera_app_->EncodeBuffer(completed_request, camera_app_->VideoStream());
 
   return true;
@@ -174,9 +191,9 @@ void CameraMessenger::UpdateStreamInfo() {
   ros_pixel_format_ = encoding->second;
 }
 
-void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) {
+void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   // Copy the specified options to the camera app.
-  auto* options = camera_app_->GetOptions();
+  auto *options = camera_app_->GetOptions();
 
   options->nopreview = new_options.nopreview;
   options->denoise = new_options.denoise;
