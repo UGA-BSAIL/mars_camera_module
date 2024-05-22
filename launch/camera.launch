@@ -12,7 +12,7 @@
     <include file="$(find mars_camera_hw_manager)/launch/manager.launch"/>
 
     <!-- Hardware monitor -->
-    <node name="hw_monitor" pkg="ros_hw_monitor" type="hw_monitor" output="screen">
+    <node name="$(anon hw_monitor)" pkg="ros_hw_monitor" type="hw_monitor" output="screen">
         <remap from="/system_info" to="/$(arg node_name)/system_info"/>
     </node>
 </launch>
