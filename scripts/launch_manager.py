@@ -29,9 +29,22 @@ class ProcessListener(roslaunch.pmon.ProcessListener):
         # Indicates whether all processes have exited.
         self.__all_finished = False
 
+        # Total number of running processes.
+        self.__num_processes = None
+        # Names of the processes that have exited.
+        self.__exited_processes = set()
+
     def process_died(self, name: str, _) -> None:
         logger.debug("Process {} exited.", name)
-        self.__all_finished = True
+        self.__exited_processes.add(name)
+
+    def set_num_processes(self, num_processes: int) -> None:
+        """
+        Args:
+            num_processes: The number of processes to wait for.
+
+        """
+        self.__num_processes = num_processes
 
     @property
     def all_finished(self) -> bool:
@@ -40,7 +53,7 @@ class ProcessListener(roslaunch.pmon.ProcessListener):
             True if all processes have finished.
 
         """
-        return self.__all_finished
+        return len(self.__exited_processes) == self.__num_processes
 
 
 def _run_launch(
@@ -79,6 +92,12 @@ def _run_launch(
             launch_file,
         )
     started_event.set()
+
+    # Set the number of processes to wait for.
+    active_processes, _ = launcher.pm.get_process_names_with_spawn_count()
+    num_processes = sum(c for _, c in active_processes)
+    logger.debug("Waiting for {} processes.", num_processes)
+    listener.set_num_processes(num_processes)
 
     # Wait for it to finish.
     logger.info("Waiting for launch file exit...")
