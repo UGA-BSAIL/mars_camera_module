@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Tuple
+from pathlib import Path
 
 import psutil
 
@@ -46,3 +47,15 @@ class Monitor:
             except psutil.NoSuchProcess:
                 pass
         return processes
+
+    def get_temps(self) -> Tuple[float, float]:
+        """
+        Returns:
+            The CPU and GPU temperatures of this device. Temperatures <0 mean
+            we couldn't read that sensor.
+
+        """
+        # Reading from /sys is a fairly portable way to get temperatures.
+        raw_temp = float(Path("/sys/class/thermal/thermal_zone0/temp").read_text())
+        return raw_temp / 1000, -1
+
