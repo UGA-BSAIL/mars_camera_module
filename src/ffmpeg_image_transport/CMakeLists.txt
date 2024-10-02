@@ -10,6 +10,7 @@ find_package(V4L2 REQUIRED)
 
 generate_dynamic_reconfigure_options(cfg/EncoderDyn.cfg)
 
+set(FFMPEG_FIND_REQUIRED TRUE)
 include(cmake/ffmpeg.cmake)
 
 catkin_package(

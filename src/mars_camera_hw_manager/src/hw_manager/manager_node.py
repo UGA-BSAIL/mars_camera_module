@@ -1,12 +1,8 @@
-#!/usr/bin/env python
-
 """
 Node for camera hardware management tasks.
 """
 
 
-import roslib
-roslib.load_manifest("mars_camera_hw_manager")
 import rospy
 
 from mars_camera_hw_manager.msg import CameraControl

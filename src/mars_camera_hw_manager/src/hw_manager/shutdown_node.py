@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 A node that does nothing except send a shutdown command to the cameras.
 """
