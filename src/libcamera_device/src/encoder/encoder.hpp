@@ -9,8 +9,8 @@
 
 #include <functional>
 
-#include "core/stream_info.hpp"
-#include "core/video_options.hpp"
+#include "../core/stream_info.hpp"
+#include "../core/video_options.hpp"
 
 typedef std::function<void(void *)> InputDoneCallback;
 typedef std::function<void(void *, size_t, int64_t, bool)> OutputReadyCallback;

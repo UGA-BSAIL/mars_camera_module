@@ -5,15 +5,14 @@
  * png.cpp - Encode image as png and write to file.
  */
 
+#include <libcamera/formats.h>
+#include <png.h>
+
 #include <cstdio>
 #include <string>
 
-#include <libcamera/formats.h>
-
-#include <png.h>
-
-#include "core/still_options.hpp"
-#include "core/stream_info.hpp"
+#include "../core/still_options.hpp"
+#include "../core/stream_info.hpp"
 
 void png_save(std::vector<libcamera::Span<uint8_t>> const &mem, StreamInfo const &info,
 			  std::string const &filename, StillOptions const *options)

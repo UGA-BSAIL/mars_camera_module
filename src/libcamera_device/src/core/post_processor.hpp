@@ -13,15 +13,14 @@
 #include <mutex>
 #include <queue>
 
-#include "core/completed_request.hpp"
-#include "core/logging.hpp"
+#include "completed_request.hpp"
 
 namespace libcamera
 {
 struct StreamConfiguration;
 }
 
-class LibcameraApp;
+class RPiCamApp;
 
 using namespace std::chrono_literals;
 class PostProcessingStage;
@@ -29,12 +28,32 @@ using PostProcessorCallback = std::function<void(CompletedRequestPtr &)>;
 using StreamConfiguration = libcamera::StreamConfiguration;
 typedef std::unique_ptr<PostProcessingStage> StagePtr;
 
+// Dynamic postprocessing library helper.
+class PostProcessingLib
+{
+public:
+	PostProcessingLib(const std::string &lib);
+	PostProcessingLib(PostProcessingLib &&other);
+	PostProcessingLib(const PostProcessingLib &other) = delete;
+	PostProcessingLib &operator=(const PostProcessingLib &other) = delete;
+	~PostProcessingLib();
+
+	const void *GetSymbol(const std::string &symbol);
+
+private:
+	void *lib_ = nullptr;
+	std::map<std::string, const void *> symbol_map_;
+	std::mutex lock_;
+};
+
 class PostProcessor
 {
 public:
-	PostProcessor(LibcameraApp *app);
+	PostProcessor(RPiCamApp *app);
 
 	~PostProcessor();
+
+	void LoadModules(const std::string &lib_dir);
 
 	void Read(std::string const &filename);
 
@@ -55,8 +74,9 @@ public:
 private:
 	PostProcessingStage *createPostProcessingStage(char const *name);
 
-	LibcameraApp *app_;
+	RPiCamApp *app_;
 	std::vector<StagePtr> stages_;
+	std::vector<PostProcessingLib> dynamic_stages_;
 	void outputThread();
 
 	std::queue<CompletedRequestPtr> requests_;

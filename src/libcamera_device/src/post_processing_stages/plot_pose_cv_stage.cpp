@@ -5,6 +5,9 @@
  * negate_stage.cpp - image negate effect
  */
 
+#include <libcamera/geometry.h>
+#include <libcamera/stream.h>
+
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -12,14 +15,9 @@
 #include <memory>
 #include <vector>
 
-#include <libcamera/geometry.h>
-#include <libcamera/stream.h>
-
-#include "core/libcamera_app.hpp"
-
-#include "post_processing_stages/post_processing_stage.hpp"
-
+#include "../core/rpicam_app.hpp"
 #include "opencv2/imgproc.hpp"
+#include "post_processing_stage.hpp"
 
 using namespace cv;
 
@@ -51,7 +49,7 @@ constexpr int FEATURE_SIZE = 17;
 class PlotPoseCvStage : public PostProcessingStage
 {
 public:
-	PlotPoseCvStage(LibcameraApp *app) : PostProcessingStage(app) {}
+	PlotPoseCvStage(RPiCamApp *app) : PostProcessingStage(app) {}
 
 	char const *Name() const override;
 
@@ -90,29 +88,36 @@ bool PlotPoseCvStage::Process(CompletedRequestPtr &completed_request)
 	if (!stream_)
 		return false;
 
-	libcamera::Span<uint8_t> buffer = app_->Mmap(completed_request->buffers[stream_])[0];
+	BufferWriteSync w(app_, completed_request->buffers[stream_]);
+	libcamera::Span<uint8_t> buffer = w.Get()[0];
 	uint32_t *ptr = (uint32_t *)buffer.data();
 	StreamInfo info = app_->GetStreamInfo(stream_);
 
-	std::vector<cv::Rect> rects;
-	std::vector<libcamera::Point> lib_locations;
-	std::vector<Point> cv_locations;
-	std::vector<float> confidences;
-
+	std::vector<std::vector<libcamera::Point>> lib_locations;
+	std::vector<std::vector<float>> confidences;
 	completed_request->post_process_metadata.Get("pose_estimation.locations", lib_locations);
 	completed_request->post_process_metadata.Get("pose_estimation.confidences", confidences);
 
-	if (!confidences.empty() && !lib_locations.empty())
+	unsigned int i = 0;
+	for (auto const &loc : lib_locations)
 	{
-		Mat image(info.height, info.width, CV_8U, ptr, info.stride);
-		for (libcamera::Point lib_location : lib_locations)
+		std::vector<cv::Rect> rects;
+		std::vector<Point> cv_locations;
+
+		std::vector<float> &conf = confidences[i];
+
+		if (!conf.empty() && !loc.empty())
 		{
-			Point cv_location;
-			cv_location.x = lib_location.x;
-			cv_location.y = lib_location.y;
-			cv_locations.push_back(cv_location);
+			Mat image(info.height, info.width, CV_8U, ptr, info.stride);
+			for (libcamera::Point lib_location : loc)
+			{
+				Point cv_location;
+				cv_location.x = lib_location.x;
+				cv_location.y = lib_location.y;
+				cv_locations.push_back(cv_location);
+			}
+			drawFeatures(image, cv_locations, conf);
 		}
-		drawFeatures(image, cv_locations, confidences);
 	}
 	return false;
 }
@@ -180,7 +185,7 @@ void PlotPoseCvStage::drawFeatures(Mat &img, std::vector<cv::Point> locations, s
 	}
 }
 
-static PostProcessingStage *Create(LibcameraApp *app)
+static PostProcessingStage *Create(RPiCamApp *app)
 {
 	return new PlotPoseCvStage(app);
 }

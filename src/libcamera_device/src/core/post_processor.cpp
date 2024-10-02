@@ -5,22 +5,96 @@
  * post_processor.cpp - Post processor implementation.
  */
 
-#include <iostream>
+#include "post_processor.hpp"
 
-#include "core/libcamera_app.hpp"
-#include "core/post_processor.hpp"
-
-#include "post_processing_stages/post_processing_stage.hpp"
+#include <dlfcn.h>
+#include <libcamera/formats.h>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <filesystem>
+#include <iostream>
+#include <map>
 
-PostProcessor::PostProcessor(LibcameraApp *app) : app_(app)
+#include "../post_processing_stages/post_processing_stage.hpp"
+#include "options.hpp"
+#include "post_processing_stages/postproc_lib.h"
+
+namespace fs = std::filesystem;
+
+PostProcessingLib::PostProcessingLib(const std::string &lib)
+{
+	if (!lib.empty())
+	{
+		lib_ = dlopen(lib.c_str(), RTLD_LAZY);
+		if (!lib_)
+			LOG_ERROR("Unable to open " << lib << " with error: " << dlerror());
+	}
+}
+
+PostProcessingLib::PostProcessingLib(PostProcessingLib &&other)
+{
+	lib_ = other.lib_;
+	symbol_map_ = std::move(other.symbol_map_);
+	other.lib_ = nullptr;
+}
+
+PostProcessingLib::~PostProcessingLib()
+{
+	if (lib_)
+		dlclose(lib_);
+}
+
+const void *PostProcessingLib::GetSymbol(const std::string &symbol)
+{
+	if (!lib_)
+		return nullptr;
+
+	std::scoped_lock<std::mutex> l(lock_);
+
+	const auto it = symbol_map_.find(symbol);
+	if (it == symbol_map_.end())
+	{
+		const void *fn = dlsym(lib_, symbol.c_str());
+
+		if (!fn)
+		{
+			LOG_ERROR("Unable to find postprocessing symbol " << symbol << " with error: " << dlerror());
+			return nullptr;
+		}
+
+		symbol_map_[symbol] = fn;
+	}
+
+	return symbol_map_[symbol];
+}
+
+PostProcessor::PostProcessor(RPiCamApp *app) : app_(app)
 {
 }
 
 PostProcessor::~PostProcessor()
 {
+	// Must clear stages_ before dynamic_stages_ as the latter will unload the necessary symbols.
+	stages_.clear();
+	dynamic_stages_.clear();
+}
+
+void PostProcessor::LoadModules(const std::string &lib_dir)
+{
+	const fs::path path(!lib_dir.empty() ? lib_dir : POSTPROC_LIB_DIR);
+	const std::string ext(".so");
+
+	if (!fs::exists(path))
+		return;
+
+	// Dynamically load all .so files from the system postprocessing lib path.
+	// This will automatically register the stages with the factory.
+	for (auto const &p : fs::recursive_directory_iterator(path))
+	{
+		if (p.path().extension() == ext)
+			dynamic_stages_.emplace_back(p.path().string());
+	}
 }
 
 void PostProcessor::Read(std::string const &filename)
@@ -29,15 +103,51 @@ void PostProcessor::Read(std::string const &filename)
 	boost::property_tree::read_json(filename, root);
 	for (auto const &key_and_value : root)
 	{
-		PostProcessingStage *stage = createPostProcessingStage(key_and_value.first.c_str());
-		if (stage)
+		if (key_and_value.first == "rpicam-apps")
 		{
-			LOG(1, "Reading post processing stage \"" << key_and_value.first << "\"");
-			stage->Read(key_and_value.second);
-			stages_.push_back(StagePtr(stage));
+			boost::property_tree::ptree const &node = key_and_value.second;
+
+			if (node.find("lores") != node.not_found())
+			{
+				static std::map<std::string, libcamera::PixelFormat> formats {
+					{ "rgb", libcamera::formats::BGR888 },
+					{ "bgr", libcamera::formats::RGB888 },
+					{ "yuv420", libcamera::formats::YUV420 },
+				};
+
+				unsigned int lores_width = node.get<unsigned int>("lores.width");
+				unsigned int lores_height = node.get<unsigned int>("lores.height");
+				bool lores_par = node.get<bool>("lores.par", app_->GetOptions()->lores_par);
+				std::string lores_format_str = node.get<std::string>("lores.format", "yuv420");
+
+				libcamera::PixelFormat lores_format = libcamera::formats::YUV420;
+
+				auto it = formats.find(lores_format_str);
+				if (it == formats.end())
+					LOG_ERROR("Unknown requested lores format: " << lores_format_str);
+				else
+					lores_format = it->second;
+
+				app_->GetOptions()->lores_width = lores_width;
+				app_->GetOptions()->lores_height = lores_height;
+				app_->GetOptions()->lores_par = lores_par;
+				app_->lores_format_ = lores_format;
+
+				LOG(1, "Postprocessing requested lores: " << lores_width << "x" << lores_height << " " << lores_format);
+			}
 		}
 		else
-			LOG(1, "No post processing stage found for \"" << key_and_value.first << "\"");
+		{
+			PostProcessingStage *stage = createPostProcessingStage(key_and_value.first.c_str());
+			if (stage)
+			{
+				LOG(1, "Reading post processing stage \"" << key_and_value.first << "\"");
+				stage->Read(key_and_value.second);
+				stages_.push_back(StagePtr(stage));
+			}
+			else
+				LOG(1, "No post processing stage found for \"" << key_and_value.first << "\"");
+		}
 	}
 }
 

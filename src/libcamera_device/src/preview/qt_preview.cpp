@@ -12,8 +12,6 @@
 #include <thread>
 
 // This header must be before the QT headers, as the latter #defines slot and emit!
-#include "core/options.hpp"
-
 #include <QApplication>
 #include <QImage>
 #include <QMainWindow>
@@ -21,6 +19,7 @@
 #include <QPainter>
 #include <QWidget>
 
+#include "../core/options.hpp"
 #include "preview.hpp"
 
 class MyMainWindow : public QMainWindow

@@ -1,9 +1,10 @@
-#include "core/libcamera_app.hpp"
+#include <iostream>
+#include "rpicam_app.hpp"
 
 #define LOG(level, text)                                                                                               \
 	do                                                                                                                 \
 	{                                                                                                                  \
-		if (LibcameraApp::GetVerbosity() >= level)                                                                     \
+		if (RPiCamApp::GetVerbosity() >= level)                                                                     \
 			std::cerr << text << std::endl;                                                                            \
 	} while (0)
 #define LOG_ERROR(text) std::cerr << text << std::endl

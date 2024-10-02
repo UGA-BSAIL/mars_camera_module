@@ -7,12 +7,12 @@
 
 #pragma once
 
-#include <memory>
-
 #include <libcamera/controls.h>
 #include <libcamera/request.h>
 
-#include "core/metadata.hpp"
+#include <memory>
+
+#include "metadata.hpp"
 
 struct CompletedRequest
 {

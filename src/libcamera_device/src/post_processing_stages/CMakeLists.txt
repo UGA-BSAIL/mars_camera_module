@@ -2,9 +2,11 @@ cmake_minimum_required(VERSION 3.6)
 
 include(GNUInstallDirs)
 
-set(SRC post_processing_stage.cpp negate_stage.cpp hdr_stage.cpp pwl.cpp histogram.cpp motion_detect_stage.cpp)
-set(TARGET_LIBS images)
+add_custom_target(PostprocLibCpp ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR} -P ${CMAKE_CURRENT_LIST_DIR}/postproc_lib.cmake)
+set_source_files_properties(postproc_lib.cpp PROPERTIES GENERATED 1)
 
+set(SRC post_processing_stage.cpp negate_stage.cpp hdr_stage.cpp pwl.cpp histogram.cpp motion_detect_stage.cpp postproc_lib.cpp)
+set(TARGET_LIBS images)
 
 if (NOT DEFINED ENABLE_OPENCV)
     set(ENABLE_OPENCV 1)
@@ -49,6 +51,7 @@ else()
 endif()
 
 add_library(post_processing_stages ${SRC})
+add_dependencies(post_processing_stages PostprocLibCpp)
 set_target_properties(post_processing_stages PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 target_link_libraries(post_processing_stages ${TARGET_LIBS})
 target_compile_definitions(post_processing_stages PUBLIC OPENCV_PRESENT=${OpenCV_FOUND})
@@ -63,6 +66,7 @@ list(APPEND ${PROJECT_NAME}_HEADERS
     pwl.hpp
     segmentation.hpp
     tf_stage.hpp
+    postproc_lib.h
 )
 
 install(FILES

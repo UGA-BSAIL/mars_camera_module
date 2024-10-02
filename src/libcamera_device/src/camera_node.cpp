@@ -14,7 +14,7 @@
 #include <string>
 
 #include "camera_messenger.hpp"
-#include "core/libcamera_encoder.hpp"
+#include "core/rpicam_encoder.hpp"
 #include "core/video_options.hpp"
 
 using dynamic_reconfigure::Server;
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
                      &default_video_options);
 
   // Set up the camera.
-  CameraMessenger camera(std::make_unique<LibcameraEncoder>(), frame_id,
+  CameraMessenger camera(std::make_unique<RPiCamEncoder>(), frame_id,
                          default_video_options);
   camera.SetMessageReadyCallback(
       std::bind(PublishEncoded, &image_publisher, kStd1));

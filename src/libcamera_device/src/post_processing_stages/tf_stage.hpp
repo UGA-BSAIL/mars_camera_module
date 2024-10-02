@@ -7,21 +7,19 @@
 
 #pragma once
 
+#include <libcamera/stream.h>
+
 #include <memory>
 #include <mutex>
 #include <vector>
 
-#include <libcamera/stream.h>
-
+#include "../core/rpicam_app.hpp"
+#include "../core/stream_info.hpp"
+#include "post_processing_stage.hpp"
 #include "tensorflow/lite/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
-
-#include "core/libcamera_app.hpp"
-#include "core/stream_info.hpp"
-
-#include "post_processing_stages/post_processing_stage.hpp"
 
 // The TfStage is a convenient base class from which post processing stages using
 // TensorFlowLite can be derived. It provides a certain amount of boiler plate code
@@ -45,7 +43,7 @@ public:
 	// exception of Name(), which derived classes must still provide.
 
 	// The constructor supplies the width and height that TFLite wants.
-	TfStage(LibcameraApp *app, int tf_w, int tf_h);
+	TfStage(RPiCamApp *app, int tf_w, int tf_h);
 
 	//char const *Name() const override;
 

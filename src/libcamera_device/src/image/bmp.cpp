@@ -5,13 +5,13 @@
  * bmp.cpp - Encode image as bmp and write to file.
  */
 
+#include <libcamera/formats.h>
+
 #include <cstdio>
 #include <string>
 
-#include <libcamera/formats.h>
-
-#include "core/still_options.hpp"
-#include "core/stream_info.hpp"
+#include "../core/still_options.hpp"
+#include "../core/stream_info.hpp"
 
 struct ImageHeader
 {

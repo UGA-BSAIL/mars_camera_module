@@ -7,12 +7,12 @@
 
 #pragma once
 
+#include <libcamera/base/span.h>
+
 #include <functional>
 #include <string>
 
-#include <libcamera/base/span.h>
-
-#include "core/stream_info.hpp"
+#include "../core/stream_info.hpp"
 
 struct Options;
 

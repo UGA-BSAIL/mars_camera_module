@@ -7,12 +7,9 @@
 
 #include <libcamera/stream.h>
 
-#include "core/libcamera_app.hpp"
-
-#include "post_processing_stages/post_processing_stage.hpp"
-
-#include "opencv2/core.hpp"
+#include "../core/rpicam_app.hpp"
 #include "opencv2/imgproc.hpp"
+#include "post_processing_stage.hpp"
 
 using namespace cv;
 
@@ -21,7 +18,7 @@ using Stream = libcamera::Stream;
 class SobelCvStage : public PostProcessingStage
 {
 public:
-	SobelCvStage(LibcameraApp *app) : PostProcessingStage(app) {}
+	SobelCvStage(RPiCamApp *app) : PostProcessingStage(app) {}
 
 	char const *Name() const override;
 
@@ -58,7 +55,8 @@ void SobelCvStage::Configure()
 bool SobelCvStage::Process(CompletedRequestPtr &completed_request)
 {
 	StreamInfo info = app_->GetStreamInfo(stream_);
-	libcamera::Span<uint8_t> buffer = app_->Mmap(completed_request->buffers[stream_])[0];
+	BufferWriteSync w(app_, completed_request->buffers[stream_]);
+	libcamera::Span<uint8_t> buffer = w.Get()[0];
 	uint8_t *ptr = (uint8_t *)buffer.data();
 
 	//Everything beyond this point is image processing...
@@ -92,7 +90,7 @@ bool SobelCvStage::Process(CompletedRequestPtr &completed_request)
 	return false;
 }
 
-static PostProcessingStage *Create(LibcameraApp *app)
+static PostProcessingStage *Create(RPiCamApp *app)
 {
 	return new SobelCvStage(app);
 }

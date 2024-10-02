@@ -34,14 +34,14 @@ ADD scripts/catkin_cmake.sh /usr/bin/catkin_cmake
 
 # Install libcamera.
 RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yaml python3-ply \
-    python3-jinja2 libgnutls28-dev openssl libdw-dev libudev-dev python3-pip gcc-8 g++-8 && \
+    python3-jinja2 libgnutls28-dev openssl libdw-dev libudev-dev python3-pip gcc-9 g++-9 && \
     rm -rf /var/lib/apt/lists/*
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 50
-RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 50
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 50
+RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 50
 RUN pip3 install meson
 RUN git clone https://github.com/raspberrypi/libcamera.git
 RUN cd libcamera \
-    && git checkout bde9b04f \
+    && git checkout 7330f29 \
     && meson build --buildtype=release -Dpipelines=rpi/vc4 -Dipas=rpi/vc4 \
     -Dv4l2=true -Dgstreamer=disabled -Dtest=false -Dlc-compliance=disabled -Dcam=disabled -Dqcam=disabled \
     -Ddocumentation=disabled && \

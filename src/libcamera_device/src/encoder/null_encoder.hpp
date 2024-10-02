@@ -12,7 +12,7 @@
 #include <queue>
 #include <thread>
 
-#include "core/video_options.hpp"
+#include "../core/video_options.hpp"
 #include "encoder.hpp"
 
 class NullEncoder : public Encoder

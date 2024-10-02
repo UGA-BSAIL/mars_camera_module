@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "core/libcamera_encoder.hpp"
+#include "core/rpicam_encoder.hpp"
 #include "core/video_options.hpp"
 
 namespace libcamera_device {
@@ -29,7 +29,7 @@ class CameraMessenger {
    * @param camera_app The camera app to read data from.
    * @param frame_id The frame ID to use for published messages.
    */
-  explicit CameraMessenger(std::unique_ptr<LibcameraEncoder> &&camera_app,
+  explicit CameraMessenger(std::unique_ptr<RPiCamEncoder> &&camera_app,
                            std::string frame_id, const VideoOptions &options);
 
   ~CameraMessenger();
@@ -63,7 +63,7 @@ class CameraMessenger {
   /// True iff camera is currently running.
   bool camera_running_ = false;
   /// Camera app that we will read frames from.
-  std::unique_ptr<LibcameraEncoder> camera_app_;
+  std::unique_ptr<RPiCamEncoder> camera_app_;
   /// Information about the video stream from the camera.
   StreamInfo stream_info_;
   /// Associated ROS pixel format.

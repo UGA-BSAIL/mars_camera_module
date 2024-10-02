@@ -7,8 +7,7 @@
 
 #include <iostream>
 
-#include "core/options.hpp"
-
+#include "../core/options.hpp"
 #include "preview.hpp"
 
 class NullPreview : public Preview

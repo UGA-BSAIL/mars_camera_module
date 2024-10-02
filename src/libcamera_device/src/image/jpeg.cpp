@@ -5,23 +5,24 @@
  * jpeg.cpp - Encode image as jpeg and write to file.
  */
 
-#include <cstdio>
-#include <cstring>
+extern "C" {
+#include <stdio.h>
+#include <jpeglib.h>
+}
+#include <libcamera/control_ids.h>
+#include <libcamera/formats.h>
+#include <libexif/exif-data.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <stdexcept>
 #include <vector>
 
-#include <libcamera/control_ids.h>
-#include <libcamera/formats.h>
-
-#include <jpeglib.h>
-#include <libexif/exif-data.h>
-
-#include "core/still_options.hpp"
-#include "core/stream_info.hpp"
+#include "../core/still_options.hpp"
+#include "../core/stream_info.hpp"
 
 #ifndef MAKE_STRING
 #define MAKE_STRING "Raspberry Pi"
@@ -456,7 +457,7 @@ static void create_exif_data(std::vector<libcamera::Span<uint8_t>> const &mem, S
 		entry = exif_create_tag(exif, EXIF_IFD_EXIF, EXIF_TAG_MODEL);
 		exif_set_string(entry, cam_model.c_str());
 		entry = exif_create_tag(exif, EXIF_IFD_EXIF, EXIF_TAG_SOFTWARE);
-		exif_set_string(entry, "libcamera-apps");
+		exif_set_string(entry, "rpicam-apps");
 		entry = exif_create_tag(exif, EXIF_IFD_EXIF, EXIF_TAG_DATE_TIME);
 		std::time_t raw_time;
 		std::time(&raw_time);

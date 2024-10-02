@@ -7,13 +7,12 @@
 
 #pragma once
 
-#include <string>
-
 #include <libcamera/base/span.h>
-
 #include <libcamera/controls.h>
 
-#include "core/stream_info.hpp"
+#include <string>
+
+#include "../core/stream_info.hpp"
 
 struct StillOptions;
 

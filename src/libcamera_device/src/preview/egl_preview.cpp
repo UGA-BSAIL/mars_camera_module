@@ -11,14 +11,12 @@
 // Include libcamera stuff before X11, as X11 #defines both Status and None
 // which upsets the libcamera headers.
 
-#include "core/options.hpp"
-
-#include "preview.hpp"
-
-#include <libdrm/drm_fourcc.h>
-
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <libdrm/drm_fourcc.h>
+
+#include "../core/options.hpp"
+#include "preview.hpp"
 // We don't use Status below, so we could consider #undefining it here.
 // We do use None, so if we had to #undefine it we could replace it by zero
 // in what follows below.
@@ -186,13 +184,15 @@ EglPreview::EglPreview(Options const *options) : Preview(options), last_fd_(-1),
 	y_ = options_->preview_y;
 	width_ = options_->preview_width;
 	height_ = options_->preview_height;
-	makeWindow("libcamera-app");
+	makeWindow("rpicam-app");
 
 	// gl_setup() has to happen later, once we're sure we're in the display thread.
 }
 
 EglPreview::~EglPreview()
 {
+	EglPreview::Reset();
+	eglDestroyContext(egl_display_, egl_context_);
 }
 
 static void no_border(Display *display, Window window)

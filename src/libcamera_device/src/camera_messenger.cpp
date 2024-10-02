@@ -62,7 +62,7 @@ uint64_t KernelToRosClock(uint32_t timestamp_us) {
 
 }  // namespace
 
-CameraMessenger::CameraMessenger(std::unique_ptr<LibcameraEncoder> &&camera_app,
+CameraMessenger::CameraMessenger(std::unique_ptr<RPiCamEncoder> &&camera_app,
                                  std::string frame_id,
                                  const VideoOptions &options)
     : camera_app_(std::move(camera_app)),
@@ -129,7 +129,7 @@ void CameraMessenger::Start() {
 
   ROS_DEBUG_STREAM("Opening camera.");
   camera_app_->OpenCamera();
-  camera_app_->ConfigureVideo(LibcameraEncoder::FLAG_VIDEO_NONE);
+  camera_app_->ConfigureVideo(RPiCamEncoder::FLAG_VIDEO_NONE);
 
   // Stream info isn't available until after the camera is configured.
   UpdateStreamInfo();
@@ -157,20 +157,20 @@ bool CameraMessenger::WaitForFrame() {
     return false;
   }
 
-  LibcameraEncoder::Msg message = camera_app_->Wait(kCameraTimeout);
-  if (message.type == LibcameraEncoder::MsgType::Timeout) {
+  RPiCamEncoder::Msg message = camera_app_->Wait(kCameraTimeout);
+  if (message.type == RPiCamEncoder::MsgType::Timeout) {
     ROS_FATAL_STREAM(
         "Timed out while waiting for a frame. This is either a hardware issue, "
         "or a bug in libcamera.");
     // It's not clear whether this is recoverable. Probably the best thing to do
     // is bail out and hove systemd restart the whole node.
     abort();
-  } else if (message.type == LibcameraEncoder::MsgType::Quit) {
+  } else if (message.type == RPiCamEncoder::MsgType::Quit) {
     ROS_INFO_STREAM("Got LibCamera quit request.");
     return false;
   }
   ROS_FATAL_STREAM_COND(
-      message.type != LibcameraEncoder::MsgType::RequestComplete,
+      message.type != RPiCamEncoder::MsgType::RequestComplete,
       "Got unrecognized message type " << static_cast<uint32_t>(message.type)
                                        << " from LibCamera!");
 

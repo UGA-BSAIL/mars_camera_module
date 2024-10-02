@@ -7,6 +7,7 @@
 
 #include <fcntl.h>
 #include <poll.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -20,22 +21,65 @@
 
 namespace {
 
+void encoderOptionsGeneral(VideoOptions const *options, AVCodecContext *codec)
+{
+	codec->framerate = { (int)(options->framerate.value_or(DEFAULT_FRAMERATE) * 1000), 1000 };
+	codec->profile = FF_PROFILE_UNKNOWN;
+
+	if (!options->profile.empty())
+	{
+		const AVCodecDescriptor *desc = avcodec_descriptor_get(codec->codec_id);
+		for (const AVProfile *profile = desc->profiles; profile && profile->profile != FF_PROFILE_UNKNOWN; profile++)
+		{
+			if (!strncasecmp(options->profile.c_str(), profile->name, options->profile.size()))
+			{
+				codec->profile = profile->profile;
+				break;
+			}
+		}
+		if (codec->profile == FF_PROFILE_UNKNOWN)
+			throw std::runtime_error("libav: no such profile " + options->profile);
+	}
+
+	codec->level = options->level.empty() ? FF_LEVEL_UNKNOWN : std::stof(options->level) * 10;
+	codec->gop_size = options->intra ? options->intra : (int)(options->framerate.value_or(DEFAULT_FRAMERATE));
+
+	if (options->bitrate)
+		codec->bit_rate = options->bitrate.bps();
+
+	if (!options->libav_video_codec_opts.empty())
+	{
+		const std::string &opts = options->libav_video_codec_opts;
+		for (std::string::size_type i = 0, n = 0; i != std::string::npos; i = n)
+		{
+			n = opts.find(';', i);
+			const std::string opt = opts.substr(i, n - i);
+			if (n != std::string::npos)
+				n++;
+			if (opt.empty())
+				continue;
+			std::string::size_type kn = opt.find('=');
+			const std::string key = opt.substr(0, kn);
+			const std::string value = (kn != std::string::npos) ? opt.substr(kn + 1) : "";
+			int ret = av_opt_set(codec, key.c_str(), value.c_str(), AV_OPT_SEARCH_CHILDREN);
+			if (ret < 0)
+			{
+				char err[AV_ERROR_MAX_STRING_SIZE];
+				av_strerror(ret, err, sizeof(err));
+				throw std::runtime_error("libav: codec option error " + opt + ": " + err);
+			}
+		}
+	}
+}
+
 void encoderOptionsH264M2M(VideoOptions const *options, AVCodecContext *codec)
 {
 	codec->pix_fmt = AV_PIX_FMT_DRM_PRIME;
 	codec->max_b_frames = 0;
-
-	if (options->bitrate)
-		codec->bit_rate = options->bitrate;
 }
 
 void encoderOptionsLibx264(VideoOptions const *options, AVCodecContext *codec)
 {
-	codec->pix_fmt = AV_PIX_FMT_YUV420P;
-
-	if (options->bitrate)
-		codec->bit_rate = options->bitrate;
-
 	codec->max_b_frames = 1;
 	codec->me_range = 16;
 	codec->me_cmp = 1; // No chroma ME
@@ -76,8 +120,8 @@ void LibAvEncoder::initVideoCodec(VideoOptions const *options, StreamInfo const 
 	codec_ctx_[Video]->height = info.height;
 	// usec timebase
 	codec_ctx_[Video]->time_base = { 1, 1000 * 1000 };
-	codec_ctx_[Video]->framerate = { (int)(options->framerate.value_or(DEFAULT_FRAMERATE) * 1000), 1000 };
 	codec_ctx_[Video]->sw_pix_fmt = AV_PIX_FMT_YUV420P;
+	codec_ctx_[Video]->pix_fmt = AV_PIX_FMT_YUV420P;
 
 	if (info.colour_space)
 	{
@@ -121,36 +165,50 @@ void LibAvEncoder::initVideoCodec(VideoOptions const *options, StreamInfo const 
 			info.colour_space->range == ColorSpace::Range::Full ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
 	}
 
-	if (!options->profile.empty())
-	{
-		static const std::map<std::string, int> profile_map = {
-			{ "baseline", FF_PROFILE_H264_BASELINE },
-			{ "main", FF_PROFILE_H264_MAIN },
-			{ "high", FF_PROFILE_H264_HIGH }
-		};
-
-		auto it = profile_map.find(options->profile);
-		if (it == profile_map.end())
-			throw std::runtime_error("libav: no such profile " + options->profile);
-
-		codec_ctx_[Video]->profile = it->second;
-	}
-
-	codec_ctx_[Video]->level = options->level.empty() ? FF_LEVEL_UNKNOWN : std::stof(options->level) * 10;
-	codec_ctx_[Video]->gop_size = options->intra ? options->intra
-											     : (int)(options->framerate.value_or(DEFAULT_FRAMERATE));
-
 	// Apply any codec specific options:
 	auto fn = optionsMap.find(options->libav_video_codec);
 	if (fn != optionsMap.end())
 		fn->second(options, codec_ctx_[Video]);
 
+	// Apply general options.
+	encoderOptionsGeneral(options, codec_ctx_[Video]);
+
+	const std::string tcp { "tcp://" };
+	const std::string udp { "udp://" };
+
+	// Setup an appropriate stream/container format.
+	const char *format = nullptr;
+	if (options->libav_format.empty())
+	{
+		// Check if output_file_ starts with a "tcp://" or "udp://" url.
+		// C++ 20 has a convenient starts_with() function for this which we may eventually use.		
+		if (output_file_.empty() ||
+			output_file_.find(tcp.c_str(), 0, tcp.length()) != std::string::npos ||
+			output_file_.find(udp.c_str(), 0, udp.length()) != std::string::npos)
+		{
+			if (options->libav_video_codec == "h264_v4l2m2m" || options->libav_video_codec == "libx264")
+				format = "h264";
+			else
+				throw std::runtime_error("libav: please specify output format with the --libav-format argument");
+		}
+	}
+	else
+		format = options->libav_format.c_str();
+
+	// Legacy handling of the --listen parameter.  If missing from the url string, add "?listen=1" to the end.
+	if (options->listen && output_file_.find(tcp.c_str(), 0, tcp.length()) != std::string::npos)
+	{
+		const std::string listen { "?listen=1" };
+		// Check if output_file_ ends with "?listen=1" parameter.
+		// C++ 20 has a convenient ends_with() function for this which we may eventually use.
+		if (output_file_.find(listen, output_file_.length() - listen.length()) == std::string::npos)
+			output_file_ += listen;
+	}
+
 	assert(out_fmt_ctx_ == nullptr);
-	avformat_alloc_output_context2(&out_fmt_ctx_, nullptr,
-								   options->libav_format.empty() ? nullptr : options->libav_format.c_str(),
-								   options->output.c_str());
+	avformat_alloc_output_context2(&out_fmt_ctx_, nullptr, format, output_file_.c_str());
 	if (!out_fmt_ctx_)
-		throw std::runtime_error("libav: cannot allocate output context");
+		throw std::runtime_error("libav: cannot allocate output context, try setting with --libav-format");
 
 	if (out_fmt_ctx_->oformat->flags & AVFMT_GLOBALHEADER)
 		codec_ctx_[Video]->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -250,7 +308,7 @@ void LibAvEncoder::initAudioOutCodec(VideoOptions const *options, StreamInfo con
 	codec_ctx_[AudioOut]->sample_rate = options->audio_samplerate ? options->audio_samplerate
 																  : stream_[AudioIn]->codecpar->sample_rate;
 	codec_ctx_[AudioOut]->sample_fmt = codec->sample_fmts[0];
-	codec_ctx_[AudioOut]->bit_rate = options->audio_bitrate;
+	codec_ctx_[AudioOut]->bit_rate = options->audio_bitrate.bps();
 	// usec timebase
 	codec_ctx_[AudioOut]->time_base = { 1, 1000 * 1000 };
 
@@ -271,9 +329,13 @@ void LibAvEncoder::initAudioOutCodec(VideoOptions const *options, StreamInfo con
 }
 
 LibAvEncoder::LibAvEncoder(VideoOptions const *options, StreamInfo const &info)
-	: Encoder(options), output_ready_(false), abort_video_(false), abort_audio_(false),
-	  video_start_ts_(0), audio_samples_(0), in_fmt_ctx_(nullptr), out_fmt_ctx_(nullptr)
+	: Encoder(options), output_ready_(false), abort_video_(false), abort_audio_(false), video_start_ts_(0),
+	  audio_samples_(0), in_fmt_ctx_(nullptr), out_fmt_ctx_(nullptr), output_file_(options->output)
 {
+	if (options->circular || options->segment || !options->save_pts.empty() || options->split)
+		LOG_ERROR("\nERROR: Pi 5 and libav encoder does not currently support the circular, segment, save_pts or "
+				  "split command line options, they will be ignored!\n");
+
 	avdevice_register_all();
 
 	if (options->verbose >= 2)
@@ -287,7 +349,7 @@ LibAvEncoder::LibAvEncoder(VideoOptions const *options, StreamInfo const &info)
 		av_dump_format(in_fmt_ctx_, 0, options_->audio_device.c_str(), 0);
 	}
 
-	av_dump_format(out_fmt_ctx_, 0, options_->output.c_str(), 1);
+	av_dump_format(out_fmt_ctx_, 0, output_file_.c_str(), 1);
 
 	LOG(2, "libav: codec init completed");
 
@@ -335,7 +397,8 @@ void LibAvEncoder::EncodeBuffer(int fd, size_t size, void *mem, StreamInfo const
 	frame->height = info.height;
 	frame->linesize[0] = info.stride;
 	frame->linesize[1] = frame->linesize[2] = info.stride >> 1;
-	frame->pts = timestamp_us - video_start_ts_ + (options_->av_sync < 0 ? -options_->av_sync : 0);
+	frame->pts = timestamp_us - video_start_ts_ +
+				 (options_->av_sync.value < 0us ? -options_->av_sync.get<std::chrono::microseconds>() : 0);
 
 	if (codec_ctx_[Video]->pix_fmt == AV_PIX_FMT_DRM_PRIME)
 	{
@@ -387,7 +450,7 @@ void LibAvEncoder::initOutput()
 	char err[64];
 	if (!(out_fmt_ctx_->flags & AVFMT_NOFILE))
 	{
-		std::string filename = options_->output;
+		std::string filename = output_file_.empty() ? "/dev/null" : output_file_;
 
 		// libav uses "pipe:" for stdout
 		if (filename == "-")
@@ -397,7 +460,7 @@ void LibAvEncoder::initOutput()
 		if (ret < 0)
 		{
 			av_strerror(ret, err, sizeof(err));
-			throw std::runtime_error("libav: unable to open output mux for " + options_->output + ": " + err);
+			throw std::runtime_error("libav: unable to open output mux for " + output_file_ + ": " + err);
 		}
 	}
 
@@ -405,7 +468,7 @@ void LibAvEncoder::initOutput()
 	if (ret < 0)
 	{
 		av_strerror(ret, err, sizeof(err));
-		throw std::runtime_error("libav: unable write output mux header for " + options_->output + ": " + err);
+		throw std::runtime_error("libav: unable write output mux header for " + output_file_ + ": " + err);
 	}
 }
 
@@ -457,7 +520,11 @@ void LibAvEncoder::encode(AVPacket *pkt, unsigned int stream_id)
 		// This would be different if one used av_write_frame().
 		ret = av_interleaved_write_frame(out_fmt_ctx_, pkt);
 		if (ret < 0)
-			throw std::runtime_error("libav: error writing output: " + std::to_string(ret));
+		{
+			char err[AV_ERROR_MAX_STRING_SIZE];
+			av_strerror(ret, err, sizeof(err));
+			throw std::runtime_error("libav: error writing output: " + std::string(err));
+		}
 	}
 }
 
@@ -656,7 +723,8 @@ void LibAvEncoder::audioThread()
 			AVRational num = { 1, out_frame->sample_rate };
 			int64_t ts = av_rescale_q(audio_samples_, num, codec_ctx_[AudioOut]->time_base);
 
-			out_frame->pts = ts + (options_->av_sync > 0 ? options_->av_sync : 0);
+			out_frame->pts = ts +
+				(options_->av_sync.value > 0us ? options_->av_sync.get<std::chrono::microseconds>() : 0);
 			audio_samples_ += codec_ctx_[AudioOut]->frame_size;
 
 			ret = avcodec_send_frame(codec_ctx_[AudioOut], out_frame);
