@@ -4,14 +4,17 @@
     <arg name="node_name" default="camera"/>
     <!-- The frame ID to use for camera messages. -->
     <arg name="frame_id" default="frame"/>
+    <!-- The camera device ID to read from. Use this to switch between camera modules. -->
+    <arg name="device_id" default="0"/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
-        <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
+        <param name="ffmpeg/encoder" value="mjpeg"/>
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
         <param name="fps" value="30"/>
         <param name="width" value="1920"/>
         <param name="height" value="1080"/>
         <param name="frame_id" value="$(arg frame_id)"/>
+        <param name="device_id" value="$(arg device_id)"/>
     </node>
 </launch>

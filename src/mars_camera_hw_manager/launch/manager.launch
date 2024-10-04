@@ -10,15 +10,12 @@
         <remap from="/system_info" to="/$(arg camera_id)/system_info"/>
     </node>
 
-    <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="hw_manager">
+    <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="hw_manager" output="screen">
         <param name="camera_id" value="$(arg camera_id)"/>
     </node>
-    <node name="$(anon camera_shutdown)" pkg="mars_camera_hw_manager" type="shutdown">
-        <param name="camera_id" value="$(arg camera_id)"/>
-    </node>
-    <node name="$(anon camera_fan_control)" pkg="mars_camera_hw_manager" type="fan_controller">
+    <node name="$(anon camera_fan_control)" pkg="mars_camera_hw_manager" type="fan_controller" output="screen">
         <!-- Fan is connected to pin 12 on v2 modules. -->
-        <param name="camera_pin" value="12"/>
+        <param name="fan_pin" value="12"/>
         <remap from="~system_info" to="/$(arg camera_id)/system_info"/>
     </node>
 </launch>

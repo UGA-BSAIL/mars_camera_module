@@ -193,7 +193,7 @@ const std::unordered_map<std::string, int> kProfiles = {
     const AVPixelFormat targetFmt = codecContext_->pix_fmt;
     if (targetFmt == AV_PIX_FMT_BGR0) {
       memcpy(frame_->data[0], p, width * height * 3);
-    } else if (targetFmt == AV_PIX_FMT_YUV420P) {
+    } else if (targetFmt == AV_PIX_FMT_YUV420P || targetFmt == AV_PIX_FMT_YUVJ420P) {
       cv::Mat yuv;
       cv::cvtColor(img, yuv, cv::COLOR_BGR2YUV_I420);
       const uint8_t *p = yuv.data;

@@ -40,12 +40,12 @@ class FanController:
         # Time at which we started the fan test.
         self.__fan_test_start_time = time.time()
 
-    def __find_speed(self, temp: float) -> float:
+    def __temp_to_speed(self, temp: float) -> float:
         """
-        Calculates a fan speed for the given temperature.
+        Figures out the fan speed for a given temperature based on the fan curver.
 
         Args:
-            temp: The temperature, in C.
+            temp: The temperature.
 
         Returns:
             The fan speed.
@@ -57,11 +57,23 @@ class FanController:
             index = -1
 
         temp_threshold = self._FAN_CURVE_TEMPS[index]
-        speed = self._FAN_CURVE[temp_threshold]
+        return self._FAN_CURVE[temp_threshold]
 
+    def __find_speed(self, temp: float) -> float:
+        """
+        Calculates a fan speed for the given temperature.
+
+        Args:
+            temp: The temperature, in C.
+
+        Returns:
+            The fan speed.
+
+        """
+        speed = self.__temp_to_speed(temp)
         if speed < self.__fan.value:
             # Apply the hysteresis before spinning down the fan.
-            speed = self.__find_speed(temp + self._HYSTERESIS)
+            speed = self.__temp_to_speed(temp + self._HYSTERESIS)
 
         return speed
 

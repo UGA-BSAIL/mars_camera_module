@@ -7,7 +7,7 @@ import rospy
 
 from mars_camera_hw_manager.msg import CameraControl
 
-from manager import Manager
+from .manager import Manager
 
 
 class Node:
@@ -36,7 +36,7 @@ class Node:
             message: The message to handle.
 
         """
-        print("Received control message.")
+        rospy.logdebug("Received control message.")
         if message.shutdown:
             # Shutdown the node.
             self.__manager.shutdown()
