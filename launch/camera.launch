@@ -5,9 +5,17 @@
     <!-- The frame ID to use for the camera. -->
     <arg name="frame_id" default="frame"/>
 
+    <!-- RGB camera -->
     <include file="$(find libcamera_device)/launch/full_hd_video.launch">
             <arg name="node_name" value="$(arg node_name)" />
             <arg name="frame_id" value="$(arg frame_id)" />
+            <arg name="device_id" value="0"/>
+    </include>
+    <!-- IR camera -->
+    <include file="$(find libcamera_device)/launch/full_hd_video.launch">
+        <arg name="node_name" value="$(arg node_name)_ir" />
+        <arg name="frame_id" value="$(arg frame_id)_ir" />
+        <arg name="device_id" value="1"/>
     </include>
     <include file="$(find mars_camera_hw_manager)/launch/manager.launch"/>
 </launch>
