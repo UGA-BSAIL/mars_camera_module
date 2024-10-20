@@ -12,7 +12,7 @@ import sys
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import bagpy
 import pandas as pd
@@ -192,6 +192,7 @@ def process_bag(
     output_base: Path,
     on_progress: Optional[Callable[[float], None]] = None,
     handle_signals: bool = True,
+    decoders: Optional[Dict[str, str]] = None,
     **ffmpeg_kwargs: Any,
 ) -> List[Path]:
     """
@@ -205,12 +206,21 @@ def process_bag(
             transcode. Will be called with the current fractional completion.
         handle_signals: If true, add handlers for SIGTERM and SIGINT so that
             it remains responsive to the user.
+        decoders: Maps video file extensions to the FFMPEG decoders to use
+            for them.
         **ffmpeg_kwargs: Will be forwarded to `_transcode_video`.
 
     Returns:
         The paths to the video files it extracted.
 
     """
+    if decoders is None:
+        decoders = {
+            ".h264": "h264_nvv4l2dec",
+            ".h265": "hevc_nvv4l2dec",
+            ".mjpeg": "mjpeg",
+        }
+
     logger.info("Extracting videos from bagfile {}...", bag_file)
 
     # Extract raw videos to temporary files.
@@ -220,10 +230,16 @@ def process_bag(
         logger.debug("Using temporary video directory {}.", video_dir)
 
         _split_bag(
-            bag_file=bag_file, output_dir=video_dir, handle_signals=handle_signals
+            bag_file=bag_file,
+            output_dir=video_dir,
+            handle_signals=handle_signals,
         )
 
-        video_files = sorted(video_dir.glob("*.h265"))
+        # Find extracted video files.
+        video_files = set(video_dir.glob("video_"))
+        # Ignore timestamps.
+        video_files -= set(video_dir.glob("*.txt"))
+        video_files = sorted(video_files)
 
         def _on_progress(fraction_done: float, video_index: int) -> None:
             if on_progress is None:
@@ -237,11 +253,13 @@ def process_bag(
         for i, video_file in enumerate(video_files):
             output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
             video_output_files.append(output_file)
+            decoder = decoders[video_file.suffix]
             try:
                 _transcode_video(
                     input_file=video_file,
                     output_file=output_file,
                     on_progress=partial(_on_progress, i),
+                    decoder=decoder,
                     **ffmpeg_kwargs,
                 )
             except FFmpegError as err:
@@ -276,10 +294,16 @@ def _make_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "-e", "--encoder", help="The encoder to use for FFmpeg.", default="h264"
+        "-e",
+        "--encoder",
+        help="The encoder to use for FFmpeg.",
+        default="h264",
     )
     parser.add_argument(
-        "-d", "--decoder", help="The decoder to use for FFmpeg.", default="h264"
+        "-d",
+        "--decoder",
+        help="The decoder to use for FFmpeg.",
+        default="h264",
     )
     parser.add_argument(
         "-b",
@@ -314,7 +338,9 @@ def main() -> None:
     if cli_args.extra_topics:
         # Extract extra topics.
         _extract_topics(
-            cli_args.bag_file, topics=cli_args.extra_topics, output_base=cli_args.output
+            cli_args.bag_file,
+            topics=cli_args.extra_topics,
+            output_base=cli_args.output,
         )
 
 
