@@ -7,11 +7,10 @@ This script handles extracting saved videos from rosbag files.
 
 from functools import partial
 from pathlib import Path
-from typing import Optional, List, Callable
+from typing import Optional, Dict, Callable, Any, List
 import signal
 import sys
 from tempfile import TemporaryDirectory
-from typing import Any, List
 import argparse
 import shutil
 import roslaunch
@@ -148,7 +147,9 @@ def _transcode_video(
     ffmpeg.execute()
 
 
-def _extract_topics(bag_file: Path, *, topics: List[str], output_base: Path) -> None:
+def _extract_topics(
+    bag_file: Path, *, topics: List[str], output_base: Path
+) -> None:
     """
     Extracts additional topics from the bag file as CSV files.
 
@@ -165,11 +166,15 @@ def _extract_topics(bag_file: Path, *, topics: List[str], output_base: Path) -> 
         topic_path = reader.message_by_topic(topic)
 
         output_dir = output_base.parent
-        output_path = output_dir / f"{output_base.name}{topic.replace('/', '_')}.csv"
+        output_path = (
+            output_dir / f"{output_base.name}{topic.replace('/', '_')}.csv"
+        )
         shutil.move(topic_path, output_path)
 
 
-def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> None:
+def _on_program_exit(
+    launcher: roslaunch.parent.ROSLaunchParent, *_: Any
+) -> None:
     """
     Handler that should run when the program exits, and cleans everything up.
 
@@ -189,6 +194,7 @@ def process_bag(
     output_base: Path,
     on_progress: Optional[Callable[[float], None]] = None,
     handle_signals: bool = True,
+    decoders: Optional[Dict[str, str]] = None,
     **ffmpeg_kwargs: Any,
 ) -> List[Path]:
     """
@@ -202,43 +208,64 @@ def process_bag(
             transcode. Will be called with the current fractional completion.
         handle_signals: If true, add handlers for SIGTERM and SIGINT so that
             it remains responsive to the user.
+        decoders: Maps video file extensions to the FFMPEG decoders to use
+            for them.
         **ffmpeg_kwargs: Will be forwarded to `_transcode_video`.
 
     Returns:
         The paths to the video files it extracted.
 
     """
+    if decoders is None:
+        decoders = {
+            ".h264": "h264_nvv4l2dec",
+            ".h265": "hevc_nvv4l2dec",
+            ".mjpeg": "mjpeg",
+        }
+
     logger.info("Extracting videos from bagfile {}...", bag_file)
 
     # Extract raw videos to temporary files.
     video_output_files = []
-    with TemporaryDirectory(dir=output_base.parent, prefix=".videos_") as video_dir:
+    with TemporaryDirectory(
+        dir=output_base.parent, prefix=".videos_"
+    ) as video_dir:
         video_dir = Path(video_dir)
         logger.debug("Using temporary video directory {}.", video_dir)
 
         _split_bag(
-            bag_file=bag_file, output_dir=video_dir, handle_signals=handle_signals
+            bag_file=bag_file,
+            output_dir=video_dir,
+            handle_signals=handle_signals,
         )
 
-        video_files = sorted(video_dir.glob("*.h265"))
+        # Find extracted video files.
+        video_files = set(video_dir.glob("video_"))
+        # Ignore timestamps.
+        video_files -= set(video_dir.glob("*.txt"))
+        video_files = sorted(video_files)
 
         def _on_progress(fraction_done: float, video_index: int) -> None:
             if on_progress is None:
                 return
             # We have to translate per-video progress into global progress.
             previous_video_fraction = 1.0 / len(video_files) * video_index
-            fraction_done = previous_video_fraction + fraction_done / len(video_files)
+            fraction_done = previous_video_fraction + fraction_done / len(
+                video_files
+            )
             on_progress(fraction_done)
 
         # Transcode those videos.
         for i, video_file in enumerate(video_files):
             output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
             video_output_files.append(output_file)
+            decoder = decoders[video_file.suffix]
             try:
                 _transcode_video(
                     input_file=video_file,
                     output_file=output_file,
                     on_progress=partial(_on_progress, i),
+                    decoder=decoder,
                     **ffmpeg_kwargs,
                 )
             except FFmpegError as err:
@@ -247,7 +274,9 @@ def process_bag(
 
         # Copy timestamps as well.
         for i, ts_file in enumerate(sorted(video_dir.glob("*.txt"))):
-            output_file = output_base.parent / f"{output_base.name}_cam{i}_ts.txt"
+            output_file = (
+                output_base.parent / f"{output_base.name}_cam{i}_ts.txt"
+            )
             shutil.copyfile(ts_file, output_file)
 
         return video_output_files
@@ -259,7 +288,9 @@ def _make_parser() -> argparse.ArgumentParser:
         A parser for command line arguments.
 
     """
-    parser = argparse.ArgumentParser(description="Extracts videos from rosbags.")
+    parser = argparse.ArgumentParser(
+        description="Extracts videos from rosbags."
+    )
 
     parser.add_argument(
         "bag_file", help="The bagfile to extract videos from.", type=Path
@@ -273,10 +304,16 @@ def _make_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "-e", "--encoder", help="The encoder to use for FFmpeg.", default="h264"
+        "-e",
+        "--encoder",
+        help="The encoder to use for FFmpeg.",
+        default="h264",
     )
     parser.add_argument(
-        "-d", "--decoder", help="The decoder to use for FFmpeg.", default="h264"
+        "-d",
+        "--decoder",
+        help="The decoder to use for FFmpeg.",
+        default="h264",
     )
     parser.add_argument(
         "-b",
@@ -311,7 +348,9 @@ def main() -> None:
     if cli_args.extra_topics:
         # Extract extra topics.
         _extract_topics(
-            cli_args.bag_file, topics=cli_args.extra_topics, output_base=cli_args.output
+            cli_args.bag_file,
+            topics=cli_args.extra_topics,
+            output_base=cli_args.output,
         )
 
 
