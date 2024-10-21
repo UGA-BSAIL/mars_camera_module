@@ -240,7 +240,7 @@ def process_bag(
         )
 
         # Find extracted video files.
-        video_files = set(video_dir.glob("video_"))
+        video_files = set(video_dir.glob("camera_*"))
         # Ignore timestamps.
         video_files -= set(video_dir.glob("*.txt"))
         video_files = sorted(video_files)
