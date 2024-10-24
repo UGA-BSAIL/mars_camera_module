@@ -91,6 +91,7 @@ def _run_launch(
             "already exited.",
             launch_file,
         )
+        return
     started_event.set()
 
     # Set the number of processes to wait for.
