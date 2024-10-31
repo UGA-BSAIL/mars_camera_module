@@ -157,23 +157,22 @@ bool FFMPEGDecoder::sendPacket(const ffmpeg_image_transport_msgs::FFMPEGPacket_<
     return false;
   }
   AVCodecContext *ctx = codecContext_;
-  AVPacket packet;
-  av_init_packet(&packet);
-  av_new_packet(&packet, msg->data.size()); // will add some padding!
-  memcpy(packet.data, &msg->data[0], msg->data.size());
-  packet.pts = msg->pts;
-  packet.dts = packet.pts;
-  ptsToHeader_[packet.pts] = msg->header;
-  int ret = avcodec_send_packet(ctx, &packet);
+  AVPacket *packet = av_packet_alloc();
+  av_new_packet(packet, msg->data.size()); // will add some padding!
+  memcpy(packet->data, &msg->data[0], msg->data.size());
+  packet->pts = msg->pts;
+  packet->dts = packet->pts;
+  ptsToHeader_[packet->pts] = msg->header;
+  int ret = avcodec_send_packet(ctx, packet);
   if (ret != 0) {
     ROS_WARN_STREAM("send_packet failed for pts " << msg->pts << ": "
                                                   << DescribeAvError(ret));
-    av_packet_unref(&packet);
-    ptsToHeader_.erase(packet.pts);
+    av_packet_free(&packet);
+    ptsToHeader_.erase(packet->pts);
     return false;
   }
 
-  av_packet_unref(&packet);
+  av_packet_free(&packet);
   return true;
 }
 
