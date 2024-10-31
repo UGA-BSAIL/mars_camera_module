@@ -7,6 +7,10 @@ project(Project)
 
 set(CATKIN_TOPLEVEL TRUE)
 
+# Boost features require >C++14
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # search for catkin within the workspace
 set(_cmd "catkin_find_pkg" "catkin" "${CMAKE_SOURCE_DIR}")
 execute_process(COMMAND ${_cmd}

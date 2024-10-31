@@ -41,7 +41,6 @@ namespace ffmpeg_image_transport {
     typedef std::unique_lock<std::recursive_mutex> Lock;
     typedef boost::function<void(const FFMPEGPacketConstPtr &pkt)> Callback;
   public:
-    FFMPEGEncoder();
     ~FFMPEGEncoder();
     // ------- various encoding settings
     void setCodec(const std::string &n) {
@@ -112,9 +111,9 @@ namespace ffmpeg_image_transport {
     int64_t           bitRate_{1000000};
     int               qmax_{0};
     // libav state
-    AVCodecContext    *codecContext_{NULL};
-    AVFrame           *frame_{NULL};
-    AVPacket          packet_;
+    AVCodecContext    *codecContext_{nullptr};
+    AVFrame           *frame_{nullptr};
+    AVPacket          *packet_{nullptr};
     int64_t           pts_{0};
     PTSToStampMap ptsToStamp_;
     // performance analysis
