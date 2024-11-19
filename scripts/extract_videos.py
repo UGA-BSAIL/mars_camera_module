@@ -123,7 +123,7 @@ def _transcode_video(
     logger.info("Transcoding {} to {}...", input_file, output_file)
     ffmpeg = (
         FFmpeg(ffmpeg_exe.as_posix() if ffmpeg_exe else "ffmpeg")
-        .input(input_file.as_posix(), {"c:v": decoder, "framerate": 24})
+        .input(input_file.as_posix(), {"c:v": decoder, "r": 24})
         .output(
             output_file.as_posix(),
             {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"},
@@ -300,12 +300,6 @@ def _make_parser() -> argparse.ArgumentParser:
         default="h264",
     )
     parser.add_argument(
-        "-d",
-        "--decoder",
-        help="The decoder to use for FFmpeg.",
-        default="h264",
-    )
-    parser.add_argument(
         "-b",
         "--bitrate",
         help="The target bitrate to use for transcoded videos.",
@@ -331,7 +325,6 @@ def main() -> None:
         bag_file=cli_args.bag_file,
         output_base=cli_args.output,
         encoder=cli_args.encoder,
-        decoder=cli_args.decoder,
         bitrate=cli_args.bitrate,
     )
 
