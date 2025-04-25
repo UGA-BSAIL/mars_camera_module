@@ -73,6 +73,8 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->denoise = "off";
   // This just outputs the raw image data with no encoding.
   out_config->codec = "yuv420";
+  // Autofocus is always enabled.
+  out_config->afMode_index = libcamera::controls::AfModeContinuous;
 
   out_config->ev = static_cast<float>(dynamic_config.ev);
   out_config->brightness = 0.0;

@@ -58,6 +58,9 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 ADD scripts/requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
+# For some reason, this header doesn't exist in Docker but is still needed.
+ADD external/dma-heap.h /usr/include/linux/dma-heap.h
+
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
 
 # Container for video extraction.
