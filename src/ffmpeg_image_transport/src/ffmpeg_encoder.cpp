@@ -22,7 +22,13 @@ const std::unordered_map<std::string, int> kProfiles = {
     {"high", FF_PROFILE_H264_HIGH},
 };
 
-} // namespace
+// Maps encoder names to the optimal pixel format to use for that encoder.
+const std::unordered_map<std::string, AVPixelFormat> kPixelFormatForEncoder = {
+    {"h264_v4l2m2m", AV_PIX_FMT_YUV420P},
+    {"mjpeg", AV_PIX_FMT_YUVJ420P},
+};
+
+}  // namespace
 
 FFMPEGEncoder::~FFMPEGEncoder() {
   Lock lock(mutex_);
@@ -96,17 +102,22 @@ bool FFMPEGEncoder::openCodec(int width, int height) {
     codecContext_->time_base = timeBase_;
     codecContext_->framerate = frameRate_;
 
-    // gop size is number of frames between keyframes
-    // small gop -> higher bandwidth, lower cpu consumption
-    codecContext_->gop_size = GOPSize_;
-    // number of bidirectional frames (per group?).
-    // NVenc can only handle zero!
-    codecContext_->max_b_frames = 0;
-
-    // encoded pixel format. Must be supported by encoder
-    // check with e.g.: ffmpeg -h encoder=h264_nvenc -pix_fmts
-
-    codecContext_->pix_fmt = pixFormat_;
+      // gop size is number of frames between keyframes
+      // small gop -> higher bandwidth, lower cpu consumption
+      codecContext_->gop_size = GOPSize_;
+      // number of bidirectional frames (per group?).
+      // NVenc can only handle zero!
+      codecContext_->max_b_frames = 0;
+   
+      // encoded pixel format. Must be supported by encoder
+      // check with e.g.: ffmpeg -h encoder=h264_nvenc -pix_fmts
+      const auto &pixel_format = kPixelFormatForEncoder.find(codecName_);
+      if (pixel_format == kPixelFormatForEncoder.end()) {
+        ROS_ERROR_STREAM("No known pixel format for encoder '" << codecName_
+                                                               << "'.");
+        throw std::runtime_error("No known pixel format for encoder.");
+      }
+      codecContext_->pix_fmt = pixel_format->second;
 
     const auto &profile = kProfiles.find(profile_);
     if (profile == kProfiles.end()) {
