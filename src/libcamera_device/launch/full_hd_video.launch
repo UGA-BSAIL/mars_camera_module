@@ -4,9 +4,11 @@
     <arg name="node_name" default="camera"/>
     <!-- The frame ID to use for camera messages. -->
     <arg name="frame_id" default="frame"/>
+    <!-- The ffmpeg encoder name to use. -->
+    <arg name="encoder" default="h264_v4l2m2m"/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
-        <param name="ffmpeg/encoder" value="h264_v4l2m2m"/>
+        <param name="ffmpeg/encoder" value="$(arg encoder)"/>
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
         <param name="fps" value="30"/>

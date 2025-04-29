@@ -6,6 +6,9 @@
     <arg name="camera_id" default="camera"/>
 
     <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="manager_node.py">
-        <param name="camera_id" value="$(arg camera_id)"/>
+        <remap to="/$(arg camera_id)/control" from="~control"/>
+    </node>
+    <node name="$(anon camera_hw_info)" pkg="mars_camera_hw_manager" type="hardware_info_node.py" output="screen">
+        <remap to="/$(arg camera_id)/hw_config" from="~camera_info"/>
     </node>
 </launch>

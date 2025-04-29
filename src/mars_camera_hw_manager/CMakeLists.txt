@@ -50,6 +50,7 @@ find_package(catkin REQUIRED COMPONENTS
  add_message_files(
    FILES
    CameraControl.msg
+   CameraInfo.msg
  )
 
 ## Generate services in the 'srv' folder
@@ -190,6 +191,10 @@ include_directories(
 #   # myfile2
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
+
+catkin_install_python(PROGRAMS
+        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 #############
 ## Testing ##

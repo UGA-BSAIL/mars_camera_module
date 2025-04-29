@@ -72,9 +72,19 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
     frame_id = config["frame_id"].as_str()
     logger.info("Launching {}...", launch_file)
 
+    # Choose the proper encoder based on the hardware capabilities.
+    capabilities = config["capabilities"]
+    if capabilities["hw_video_encode"].get(bool):
+        encoder = "h264_v4l2m2m"
+    else:
+        encoder = "mjpeg"
+    logger.debug("Selected encoder: {}", encoder)
+
     launch_file = roslaunch.rlutil.resolve_launch_arguments((launch_file.as_posix(), "--wait"))[0]
     uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-    launcher = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file, [f"node_name:={node_name}", f"frame_id:={frame_id}"])])
+    launcher = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file,
+        [f"node_name:={node_name}", f"frame_id:={frame_id}", f"encoder:={encoder}"]
+    )])
     launcher.start()
 
     return launcher
