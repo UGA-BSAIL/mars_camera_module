@@ -195,6 +195,7 @@ include_directories(
 catkin_install_python(PROGRAMS
         nodes/hw_manager
         nodes/fan_controller
+        nodes/hw_info
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

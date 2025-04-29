@@ -7,17 +7,18 @@
 
     <!-- For fan control to work, the hardware monitor needs to be running. -->
     <node name="$(anon hw_monitor)" pkg="ros_hw_monitor" type="hw_monitor" output="screen">
-        <remap from="/system_info" to="/$(arg camera_id)/system_info"/>
+        <remap from="~system_info" to="/$(arg camera_id)/system_info"/>
     </node>
 
     <node name="$(anon camera_fan_control)" pkg="mars_camera_hw_manager" type="fan_controller" output="screen">
         <!-- Fan is connected to pin 12 on v2 modules. -->
         <param name="fan_pin" value="12"/>
         <remap from="~system_info" to="/$(arg camera_id)/system_info"/>
-    <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="manager_node.py">
+    </node>
+    <node name="$(anon camera_hw_manager)" pkg="mars_camera_hw_manager" type="hw_manager">
         <remap to="/$(arg camera_id)/control" from="~control"/>
     </node>
-    <node name="$(anon camera_hw_info)" pkg="mars_camera_hw_manager" type="hardware_info_node.py" output="screen">
+    <node name="$(anon camera_hw_info)" pkg="mars_camera_hw_manager" type="hw_info" output="screen">
         <remap to="/$(arg camera_id)/hw_config" from="~camera_info"/>
     </node>
 </launch>

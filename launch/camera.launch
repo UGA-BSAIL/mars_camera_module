@@ -23,5 +23,7 @@
         <arg name="quality" value="8"/>
         <arg name="encoder" value="$(arg encoder)" />
     </include>
-    <include file="$(find mars_camera_hw_manager)/launch/manager.launch"/>
+    <include file="$(find mars_camera_hw_manager)/launch/manager.launch">
+        <arg name="camera_id" value="$(arg node_name)" />
+    </include>
 </launch>

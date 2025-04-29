@@ -36,7 +36,7 @@ def main() -> None:
         monitor = JetsonMonitor()
 
     # Create the publisher.
-    publisher = rospy.Publisher("system_info", System, queue_size=1)
+    publisher = rospy.Publisher("~system_info", System, queue_size=1)
 
     # Get update rate in Hz.
     update_rate = int(rospy.get_param("~update_rate", 1))
