@@ -301,8 +301,6 @@ void LibcameraApp::ConfigureViewfinder()
 		configuration_->at(raw_stream_num).bufferCount = configuration_->at(0).bufferCount;
 	}
 
-	configuration_->transform = options_->transform;
-
 	post_processor_.AdjustConfig("viewfinder", &configuration_->at(0));
 
 	configureDenoise(options_->denoise == "auto" ? "cdn_off" : options_->denoise);
@@ -348,7 +346,6 @@ void LibcameraApp::ConfigureStill(unsigned int flags)
 	if (options_->height)
 		configuration_->at(0).size.height = options_->height;
 	configuration_->at(0).colorSpace = libcamera::ColorSpace::Sycc;
-	configuration_->transform = options_->transform;
 
 	post_processor_.AdjustConfig("still", &configuration_->at(0));
 
@@ -406,7 +403,6 @@ void LibcameraApp::ConfigureVideo(unsigned int flags)
 		cfg.colorSpace = libcamera::ColorSpace::Rec709;
 	else
 		cfg.colorSpace = libcamera::ColorSpace::Smpte170m;
-	configuration_->transform = options_->transform;
 
 	post_processor_.AdjustConfig("video", &configuration_->at(0));
 
@@ -435,7 +431,6 @@ void LibcameraApp::ConfigureVideo(unsigned int flags)
 		configuration_->at(lores_index).size = lores_size;
 		configuration_->at(lores_index).bufferCount = configuration_->at(0).bufferCount;
 	}
-	configuration_->transform = options_->transform;
 
 	configureDenoise(options_->denoise == "auto" ? "cdn_fast" : options_->denoise);
 	setupCapture();

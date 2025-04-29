@@ -22,6 +22,12 @@ const std::unordered_map<std::string, int> kProfiles = {
     {"high", FF_PROFILE_H264_HIGH},
 };
 
+// Maps encoder names to the optimal pixel format to use for that encoder.
+const std::unordered_map<std::string, AVPixelFormat> kPixelFormatForEncoder = {
+    {"h264_v4l2m2m", AV_PIX_FMT_YUV420P},
+    {"mjpeg", AV_PIX_FMT_YUVJ420P},
+};
+
 }  // namespace
 
   FFMPEGEncoder::FFMPEGEncoder() {
@@ -67,7 +73,7 @@ const std::unordered_map<std::string, int> kProfiles = {
     return (openCodec(width, height));
   }
 
-	bool FFMPEGEncoder::openCodec(int width, int height) {
+  bool FFMPEGEncoder::openCodec(int width, int height) {
     codecContext_ = NULL;
     try {
       if (codecName_.empty()) {
@@ -78,7 +84,7 @@ const std::unordered_map<std::string, int> kProfiles = {
                                   "multiple of 32 but is: " + std::to_string(width)));
       }
       // find codec
-      AVCodec *codec = avcodec_find_encoder_by_name(codecName_.c_str());
+      const AVCodec *codec = avcodec_find_encoder_by_name(codecName_.c_str());
       if (!codec) {
         throw (std::runtime_error("cannot find codec: " + codecName_));
       }
@@ -103,8 +109,13 @@ const std::unordered_map<std::string, int> kProfiles = {
    
       // encoded pixel format. Must be supported by encoder
       // check with e.g.: ffmpeg -h encoder=h264_nvenc -pix_fmts
-
-      codecContext_->pix_fmt = pixFormat_;
+      const auto &pixel_format = kPixelFormatForEncoder.find(codecName_);
+      if (pixel_format == kPixelFormatForEncoder.end()) {
+        ROS_ERROR_STREAM("No known pixel format for encoder '" << codecName_
+                                                               << "'.");
+        throw std::runtime_error("No known pixel format for encoder.");
+      }
+      codecContext_->pix_fmt = pixel_format->second;
 
       const auto& profile = kProfiles.find(profile_);
       if (profile == kProfiles.end()) {
@@ -193,7 +204,8 @@ const std::unordered_map<std::string, int> kProfiles = {
     const AVPixelFormat targetFmt = codecContext_->pix_fmt;
     if (targetFmt == AV_PIX_FMT_BGR0) {
       memcpy(frame_->data[0], p, width * height * 3);
-    } else if (targetFmt == AV_PIX_FMT_YUV420P) {
+    } else if (targetFmt == AV_PIX_FMT_YUV420P ||
+               targetFmt == AV_PIX_FMT_YUVJ420P) {
       cv::Mat yuv;
       cv::cvtColor(img, yuv, cv::COLOR_BGR2YUV_I420);
       const uint8_t *p = yuv.data;

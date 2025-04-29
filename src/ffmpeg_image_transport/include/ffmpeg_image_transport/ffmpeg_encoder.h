@@ -105,7 +105,6 @@ namespace ffmpeg_image_transport {
     std::string       codecName_;
     std::string       preset_;
     std::string       profile_;
-    AVPixelFormat     pixFormat_{AV_PIX_FMT_YUV420P};
     AVRational        timeBase_{1, 40};
     AVRational        frameRate_{40, 1};
     int               GOPSize_{15};
