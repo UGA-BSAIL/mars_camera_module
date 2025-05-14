@@ -160,7 +160,7 @@ class LaunchManager:
 
             # Wait for it to start before returning.
             logger.info("Waiting for process start...")
-            successfully_started = started_event.wait(timeout=10)
+            successfully_started = started_event.wait(timeout=30)
             if not successfully_started:
                 logger.warning(
                     "Launch file did not start properly. Retrying..."
