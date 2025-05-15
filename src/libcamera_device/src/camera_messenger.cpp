@@ -209,6 +209,10 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->height = new_options.height;
   options->camera = new_options.camera;
   options->afMode_index = new_options.afMode_index;
+  options->afWindow_x = new_options.afWindow_x;
+  options->afWindow_y = new_options.afWindow_y;
+  options->afWindow_width = new_options.afWindow_width;
+  options->afWindow_height = new_options.afWindow_height;
 }
 
 }  // namespace libcamera_device

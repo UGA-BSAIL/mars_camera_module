@@ -73,8 +73,15 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->denoise = "off";
   // This just outputs the raw image data with no encoding.
   out_config->codec = "yuv420";
+
   // Autofocus is always enabled.
   out_config->afMode_index = libcamera::controls::AfModeContinuous;
+  // Set it to use the center of the frame for autofocus to avoid confusion from
+  // MARS structural elements.
+  out_config->afWindow_x = 0.25;
+  out_config->afWindow_y = 0.25;
+  out_config->afWindow_width = 0.5;
+  out_config->afWindow_height = 0.5;
 
   out_config->ev = static_cast<float>(dynamic_config.ev);
   out_config->brightness = 0.0;
