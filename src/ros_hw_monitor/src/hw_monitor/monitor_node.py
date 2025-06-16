@@ -21,7 +21,7 @@ def _update_stats(monitor: Monitor, publisher: rospy.Publisher) -> None:
     if isinstance(monitor, JetsonMonitor):
         message.gpu_usage = monitor.gpu_usage()
 
-    message.cpu_temp, message.gpu_temp = monitor.get_temps()
+    message.cpu_temp, message.gpu_temp, message.npu_temp = monitor.get_temps()
 
     publisher.publish(message)
 

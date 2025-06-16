@@ -31,6 +31,6 @@ class JetsonMonitor(Monitor):
         gpu_key = next(iter(self.__jetson.gpu.keys()))
         return self.__jetson.gpu[gpu_key]["status"]["load"]
 
-    def get_temps(self) -> Tuple[float, float]:
+    def get_temps(self) -> Tuple[float, float, float]:
         temps = self.__jetson.temperature
-        return temps["CPU"]["temp"], temps["GPU"]["temp"]
+        return temps["CPU"]["temp"], temps["GPU"]["temp"], -1

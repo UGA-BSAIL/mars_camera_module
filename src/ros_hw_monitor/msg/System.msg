@@ -10,3 +10,5 @@ float32 gpu_usage
 float32 cpu_temp
 # GPU temperature, in C
 float32 gpu_temp
+# NPU temperature, in C
+float32 npu_temp

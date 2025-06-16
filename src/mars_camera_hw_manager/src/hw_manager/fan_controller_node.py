@@ -91,7 +91,7 @@ class FanController:
             self.__fan.value = 1.0
             return
 
-        temp = max(message.cpu_temp, message.gpu_temp)
+        temp = max(message.cpu_temp, message.gpu_temp, message.npu_temp)
         speed = self.__find_speed(temp)
 
         # Set the speed.

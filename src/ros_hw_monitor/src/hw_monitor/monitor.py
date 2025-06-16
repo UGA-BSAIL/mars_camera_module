@@ -3,13 +3,27 @@ from pathlib import Path
 
 import psutil
 
+import rospy
 from ros_hw_monitor.msg import Process
+try:
+    from hailo_platform import Device
+except ImportError:
+    # This system does not have the HAILO RT library installed.
+    Device = None
 
 
 class Monitor:
     """
     Monitors basic hardware info for the device it is running on.
     """
+
+    def __init__(self):
+        self.__hailo_devices = []
+        if Device is not None:
+            # Enumerate HAILO targets.
+            devices_info = Device.scan()
+            self.__hailo_devices = [Device(d) for d in devices_info]
+            rospy.loginfo(f"Found {len(devices_info)} HAILO devices.")
 
     @staticmethod
     def __message_from_process(process: psutil.Process) -> Process:
@@ -48,14 +62,22 @@ class Monitor:
                 pass
         return processes
 
-    def get_temps(self) -> Tuple[float, float]:
+    def get_temps(self) -> Tuple[float, float, float]:
         """
         Returns:
-            The CPU and GPU temperatures of this device. Temperatures <0 mean
+            The CPU, GPU, and NPU temperatures of this device. Temperatures <0 mean
             we couldn't read that sensor.
 
         """
         # Reading from /sys is a fairly portable way to get temperatures.
-        raw_temp = float(Path("/sys/class/thermal/thermal_zone0/temp").read_text())
-        return raw_temp / 1000, -1
+        raw_cpu_temp = float(Path("/sys/class/thermal/thermal_zone0/temp").read_text())
+        cpu_temp = raw_cpu_temp / 1000
+
+        # Measure NPU temperatures.
+        max_hailo_temp = -1.0
+        for device in self.__hailo_devices:
+            hailo_temp = device.control.get_chip_temperature().ts0_temperature
+            max_hailo_temp = max(hailo_temp, max_hailo_temp)
+
+        return cpu_temp, -1, max_hailo_temp
 
