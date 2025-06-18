@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Launch file for HAILO object detection from camera images. -->
+
+<launch>
+    <!-- The path to the model HEF file. -->
+    <arg name="hef_file_path"/>
+    <!-- Camera ID to use, which will dictate the name of the topic it listens on. -->
+    <arg name="camera_id" default="camera"/>
+
+    <!-- Runs inference on the HAILO with camera frames. -->
+    <node name="hailo_inference" pkg="hailo_model_runner" type="hailo_inference" output="screen">
+    	<param name="hef_file_path" value="$(arg hef_file_path)"/>
+    	<remap from="~image" to="/$(arg camera_id)"/>
+    	<remap from="~detections" to="/$(arg camera_id)/detections"/>
+    </node>
+</launch>

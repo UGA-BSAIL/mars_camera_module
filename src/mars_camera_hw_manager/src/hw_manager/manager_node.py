@@ -2,7 +2,6 @@
 Node for camera hardware management tasks.
 """
 
-
 import rospy
 
 from mars_camera_hw_manager.msg import CameraControl
@@ -23,7 +22,9 @@ class Node:
         self.__manager = manager
 
         # Set up the subscription.
-        self.__control_subscriber = rospy.Subscriber("~control", CameraControl, self.__handle_control)
+        self.__control_subscriber = rospy.Subscriber(
+            "~control", CameraControl, self.__handle_control
+        )
         rospy.loginfo("Waiting for control commands...")
 
     def __handle_control(self, message: CameraControl) -> None:

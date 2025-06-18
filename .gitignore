@@ -3,3 +3,5 @@ devel/
 
 # IDE files
 .idea/
+
+.venv/

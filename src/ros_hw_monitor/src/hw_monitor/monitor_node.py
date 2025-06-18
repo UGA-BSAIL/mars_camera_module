@@ -2,7 +2,6 @@
 Monitors the hardware on the device that it is running on and reports status.
 """
 
-
 import rospy
 
 from ros_hw_monitor.msg import System
@@ -44,4 +43,3 @@ def main() -> None:
     while not rospy.is_shutdown():
         _update_stats(monitor, publisher)
         rate.sleep()
-

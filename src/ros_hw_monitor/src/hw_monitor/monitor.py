@@ -5,6 +5,7 @@ import psutil
 
 import rospy
 from ros_hw_monitor.msg import Process
+
 try:
     from hailo_platform import Device
 except ImportError:
@@ -80,4 +81,3 @@ class Monitor:
             max_hailo_temp = max(hailo_temp, max_hailo_temp)
 
         return cpu_temp, -1, max_hailo_temp
-

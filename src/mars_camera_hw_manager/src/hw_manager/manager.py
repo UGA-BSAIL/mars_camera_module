@@ -2,7 +2,6 @@
 Implements actual hardware management tasks.
 """
 
-
 import rospy
 import subprocess
 
