@@ -37,7 +37,9 @@ def _get_local_ip() -> str:
         The IP address of this module.
 
     """
-    assert ROS_INTERFACE_NAME in interfaces(), f"{ROS_INTERFACE_NAME} is not a valid network interface!"
+    assert (
+        ROS_INTERFACE_NAME in interfaces()
+    ), f"{ROS_INTERFACE_NAME} is not a valid network interface!"
 
     # Get the associated addresses.
     inet_address = ifaddresses(ROS_INTERFACE_NAME)[AF_INET]
@@ -70,6 +72,7 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
     launch_file = config["launch_file"].as_path()
     node_name = config["node_name"].as_str()
     frame_id = config["frame_id"].as_str()
+    model_dir = config["hailo"]["model_dir"].as_path()
     logger.info("Launching {}...", launch_file)
 
     # Choose the proper encoder based on the hardware capabilities.
@@ -80,11 +83,24 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
         encoder = "mjpeg"
     logger.debug("Selected encoder: {}", encoder)
 
-    launch_file = roslaunch.rlutil.resolve_launch_arguments((launch_file.as_posix(), "--wait"))[0]
+    launch_file = roslaunch.rlutil.resolve_launch_arguments(
+        (launch_file.as_posix(), "--wait")
+    )[0]
     uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-    launcher = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file,
-        [f"node_name:={node_name}", f"frame_id:={frame_id}", f"encoder:={encoder}"]
-    )])
+    launcher = roslaunch.parent.ROSLaunchParent(
+        uuid,
+        [
+            (
+                launch_file,
+                [
+                    f"node_name:={node_name}",
+                    f"frame_id:={frame_id}",
+                    f"encoder:={encoder}",
+                    f"model_dir:={model_dir}",
+                ],
+            )
+        ],
+    )
     launcher.start()
 
     return launcher
@@ -118,4 +134,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
