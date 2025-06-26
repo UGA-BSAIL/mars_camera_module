@@ -55,7 +55,7 @@ class HailoAsyncInference:
         if input_type is not None:
             self._set_input_type(input_type)
         if output_type is not None:
-            self._set_output_type(output_type)
+            self.set_output_type(output_type)
 
         self.output_type = output_type
         self.send_original_frame = send_original_frame
@@ -70,7 +70,7 @@ class HailoAsyncInference:
         """
         self.infer_model.input().set_format_type(getattr(FormatType, input_type))
 
-    def _set_output_type(
+    def set_output_type(
         self, output_type_dict: Optional[Dict[str, str]] = None
     ) -> None:
         """
@@ -84,6 +84,8 @@ class HailoAsyncInference:
             self.infer_model.output(output_name).set_format_type(
                 getattr(FormatType, output_type)
             )
+
+        self.output_type = output_type_dict
 
     def callback(
         self,

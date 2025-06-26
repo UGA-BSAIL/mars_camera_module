@@ -10,13 +10,15 @@
     <arg name="device_id" default="0"/>
     <!-- The quality value to use. For MJPEG, this is the equivalent of setting the -q flag. -->
     <arg name="quality" default="2"/>
+    <!-- The maximum FPS to allow from the camera. -->
+    <arg name="fps" default="30"/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/qmax" value="$(arg quality)"/>
         <param name="ffmpeg/encoder" value="$(arg encoder)"/>
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
-        <param name="fps" value="30"/>
+        <param name="fps" value="$(arg fps)"/>
         <param name="width" value="1920"/>
         <param name="height" value="1080"/>
         <param name="frame_id" value="$(arg frame_id)"/>

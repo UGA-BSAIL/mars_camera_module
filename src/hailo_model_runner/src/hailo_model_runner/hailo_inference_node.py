@@ -41,8 +41,6 @@ class HailoInferenceManager:
             hef_path.as_posix(),
             self.__input_queue,
             self.__output_queue,
-            # Force the appearance feature output to float32.
-            # output_type={"yolov8m_flower_renamed/conv20": "FLOAT32"},
             send_original_frame=False,
         )
         self.__inference_thread = threading.Thread(target=self.__async_inference.run)
@@ -51,11 +49,18 @@ class HailoInferenceManager:
         self.__box_output_name, self.__feature_output_name = (
             self.__get_model_output_names()
         )
+        # Force the appearance feature output to float32.
+        self.__async_inference.set_output_type(
+            {self.__box_output_name: "FLOAT32", self.__feature_output_name: "FLOAT32"}
+        )
 
         # Time at which we last logged inference stats.
         self.__last_inference_stat_time = time.time()
         # How many frames we've processed since the last stats log.
         self.__frames_since_last_stat = 0
+
+        # Rate limitter to control CPU usage.
+        self.__rate = rospy.Rate(100)
 
     def __get_model_output_names(self) -> Tuple[str, str]:
         """
@@ -143,6 +148,8 @@ class HailoInferenceManager:
             image: The image message.
 
         """
+        self.__rate.sleep()
+
         header = image.header
         image = self.__img_to_numpy(image)
         # Downsample by half. We do it in this simplistic way to save CPU time.
