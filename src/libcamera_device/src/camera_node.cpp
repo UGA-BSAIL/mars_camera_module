@@ -109,9 +109,15 @@ void ReconfigureParams(CameraMessenger *messenger,
   VideoOptions camera_options;
   ParamToVideoConfig(static_config, dynamic_config, &camera_options);
 
+  // Set focus lock.
+  messenger->SetFocusLocked(dynamic_config.lock_focus);
+
   // Camera needs to be restarted for these to take effect.
-  messenger->Stop();
-  messenger->ConfigureOptions(camera_options);
+  if (level & 0x1) {
+    // Some parameters were changed which require a full reset.
+    messenger->Stop();
+    messenger->ConfigureOptions(camera_options);
+  }
 
   try {
       messenger->Start();

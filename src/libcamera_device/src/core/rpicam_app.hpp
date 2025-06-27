@@ -138,6 +138,17 @@ public:
 	void ConfigureStill(unsigned int flags = FLAG_STILL_NONE);
 	void ConfigureVideo(unsigned int flags = FLAG_VIDEO_NONE);
 	void ConfigureZsl(unsigned int still_flags = FLAG_STILL_NONE);
+        /**
+         * @brief Sets the focus lock in continuous autofocus mode.
+         *
+         * This function allows the user to lock the focus in continuous autofocus mode.
+         * When the focus is locked, the camera will not automatically refocus on a different subject.
+         * This can be useful in situations where the camera needs to focus on a static subject for an extended period of time.
+         *
+         * @param locked A boolean value indicating whether to lock the focus.
+         *  If true, the focus will be locked. If false, the focus will be unlocked.
+         */
+        void SetFocusLocked(bool locked);
 
 	void Teardown();
 	void StartCamera();

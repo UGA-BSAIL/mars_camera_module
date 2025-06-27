@@ -215,4 +215,9 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->afWindow_height = new_options.afWindow_height;
 }
 
+void CameraMessenger::SetFocusLocked(bool locked) {
+  ROS_INFO_STREAM("Setting focus lock to " << locked);
+  camera_app_->SetFocusLocked(locked);
+}
+
 }  // namespace libcamera_device

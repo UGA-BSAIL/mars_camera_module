@@ -59,6 +59,12 @@ class CameraMessenger {
    */
   void ConfigureOptions(const VideoOptions &new_options);
 
+  /**
+   * @brief Sets whether auto-focus is locked
+   * @param locked True iff auto-focus should be locked.
+   */
+  void SetFocusLocked(bool locked);
+
  private:
   /// True iff camera is currently running.
   bool camera_running_ = false;

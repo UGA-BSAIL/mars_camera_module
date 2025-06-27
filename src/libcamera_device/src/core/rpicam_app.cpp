@@ -1217,3 +1217,11 @@ void RPiCamApp::configureDenoise(const std::string &denoise_mode)
 
 	controls_.set(NoiseReductionMode, denoise);
 }
+
+void RPiCamApp::SetFocusLocked(bool locked) {
+  if (locked) {
+    controls_.set(controls::AfPause, controls::AfPauseEnum::AfPauseImmediate);
+  } else {
+    controls_.set(controls::AfPause, controls::AfPauseEnum::AfPauseResume);
+  }
+}
