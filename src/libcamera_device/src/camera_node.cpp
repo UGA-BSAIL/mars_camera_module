@@ -88,6 +88,8 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->contrast = static_cast<float>(dynamic_config.contrast);
   out_config->saturation = static_cast<float>(dynamic_config.saturation);
   out_config->sharpness = static_cast<float>(dynamic_config.sharpness);
+
+  out_config->post_process_file = dynamic_config.postprocess_file;
 }
 
 /**

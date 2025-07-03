@@ -45,7 +45,7 @@ PostProcessingLib::~PostProcessingLib()
 		dlclose(lib_);
 }
 
-const void *PostProcessingLib::GetSymbol(const std::string &symbol)
+void *PostProcessingLib::GetSymbol(const std::string &symbol)
 {
 	if (!lib_)
 		return nullptr;
@@ -55,7 +55,7 @@ const void *PostProcessingLib::GetSymbol(const std::string &symbol)
 	const auto it = symbol_map_.find(symbol);
 	if (it == symbol_map_.end())
 	{
-		const void *fn = dlsym(lib_, symbol.c_str());
+		void *fn = dlsym(lib_, symbol.c_str());
 
 		if (!fn)
 		{
@@ -67,6 +67,17 @@ const void *PostProcessingLib::GetSymbol(const std::string &symbol)
 	}
 
 	return symbol_map_[symbol];
+}
+
+template <typename ReturnType, typename... Args>
+std::function<ReturnType(Args...)> PostProcessingLib::GetFunction(
+    const std::string &symbol) {
+  void *loaded_function = GetSymbol(symbol);
+  if (!loaded_function) {
+    return nullptr;
+  }
+
+  return static_cast<std::function<ReturnType(Args...)>>(loaded_function);
 }
 
 PostProcessor::PostProcessor(RPiCamApp *app) : app_(app)

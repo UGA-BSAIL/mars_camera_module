@@ -5,13 +5,13 @@
  * hailo_postprocessing_stage.cpp - Hailo software stage base class and helpers
  */
 
-#include <algorithm>
-#include <string>
-#include <sys/mman.h>
-
 #include "hailo_postprocessing_stage.hpp"
 
-#include "hailo_postproc_lib.h"
+#include <ros/ros.h>
+#include <sys/mman.h>
+
+#include <algorithm>
+#include <string>
 
 using namespace hailort;
 
@@ -111,11 +111,13 @@ void HailoPostProcessingStage::Configure()
 
 int HailoPostProcessingStage::configureHailoRT()
 {
+        ROS_INFO_STREAM("Configuring HAILO device");
 	Expected<std::unique_ptr<VDevice>> vdevice_exp = VDevice::create();
 	if (!vdevice_exp)
 	{
-		LOG_ERROR("Failed create vdevice, status = " << vdevice_exp.status());
-		return vdevice_exp.status();
+          ROS_ERROR_STREAM(
+              "Failed create vdevice, status = " << vdevice_exp.status());
+          return vdevice_exp.status();
 	}
 	vdevice_ = vdevice_exp.release();
 
@@ -123,8 +125,9 @@ int HailoPostProcessingStage::configureHailoRT()
 	Expected<std::shared_ptr<InferModel>> infer_model_exp = vdevice_->create_infer_model(hef_file_);
 	if (!infer_model_exp)
 	{
-		LOG_ERROR("Failed to create infer model, status = " << infer_model_exp.status());
-		return infer_model_exp.status();
+          ROS_ERROR_STREAM("Failed to create infer model, status = "
+                           << infer_model_exp.status());
+          return infer_model_exp.status();
 	}
 	infer_model_ = infer_model_exp.release();
 	infer_model_->set_hw_latency_measurement_flags(HAILO_LATENCY_MEASURE);
@@ -134,8 +137,9 @@ int HailoPostProcessingStage::configureHailoRT()
 	Expected<ConfiguredInferModel> configured_infer_model_exp = infer_model_->configure();
 	if (!configured_infer_model_exp)
 	{
-		LOG_ERROR("Failed to create configured infer model, status = " << configured_infer_model_exp.status());
-		return configured_infer_model_exp.status();
+          ROS_ERROR_STREAM("Failed to create configured infer model, status = "
+                           << configured_infer_model_exp.status());
+          return configured_infer_model_exp.status();
 	}
 	configured_infer_model_ = std::make_shared<ConfiguredInferModel>(configured_infer_model_exp.release());
 
@@ -143,8 +147,9 @@ int HailoPostProcessingStage::configureHailoRT()
 	Expected<ConfiguredInferModel::Bindings> bindings_exp = configured_infer_model_->create_bindings();
 	if (!bindings_exp)
 	{
-		LOG_ERROR("Failed to create infer bindings, status = " << bindings_exp.status());
-		return bindings_exp.status();
+          ROS_ERROR_STREAM("Failed to create infer bindings, status = "
+                           << bindings_exp.status());
+          return bindings_exp.status();
 	}
 	bindings_ = std::move(bindings_exp.release());
 
@@ -168,8 +173,9 @@ hailo_status HailoPostProcessingStage::DispatchJob(const uint8_t *input, AsyncIn
 	status = bindings_.input(input_name)->set_buffer(MemoryView((void *)(input), input_frame_size));
 	if (status != HAILO_SUCCESS)
 	{
-		LOG_ERROR("Could not write to input stream with status " << status);
-		return status;
+          ROS_ERROR_STREAM("Could not write to input stream with status "
+                           << status);
+          return status;
 	}
 
 	// Output tensors.
@@ -179,15 +185,16 @@ hailo_status HailoPostProcessingStage::DispatchJob(const uint8_t *input, AsyncIn
 		std::shared_ptr<uint8_t> output_buffer = allocator_.Allocate(output_size);
 		if (!output_buffer)
 		{
-			LOG_ERROR("Could not allocate an output buffer!");
-			return status;
+                  ROS_ERROR_STREAM("Could not allocate an output buffer!");
+                  return status;
 		}
 
 		status = bindings_.output(output_name)->set_buffer(MemoryView(output_buffer.get(), output_size));
 		if (status != HAILO_SUCCESS)
 		{
-			LOG_ERROR("Failed to set infer output buffer, status = " << status);
-			return status;
+                  ROS_ERROR_STREAM(
+                      "Failed to set infer output buffer, status = " << status);
+                  return status;
 		}
 
 		const std::vector<hailo_quant_info_t> quant = infer_model_->output(output_name)->get_quant_infos();
@@ -200,8 +207,9 @@ hailo_status HailoPostProcessingStage::DispatchJob(const uint8_t *input, AsyncIn
 	status = configured_infer_model_->wait_for_async_ready(1s);
 	if (status != HAILO_SUCCESS)
 	{
-		LOG_ERROR("Failed to wait for async ready, status = " << status);
-		return status;
+          ROS_ERROR_STREAM(
+              "Failed to wait for async ready, status = " << status);
+          return status;
 	}
 
 	Expected<LatencyMeasurementResult> inf_time_exp = configured_infer_model_->get_hw_latency_measurement();
@@ -214,8 +222,9 @@ hailo_status HailoPostProcessingStage::DispatchJob(const uint8_t *input, AsyncIn
 		const auto frame_time = std::chrono::duration_cast<std::chrono::milliseconds>(this_frame - last_frame_);
 
 		if (frame_time < inf_time)
-			LOG(2, "Warning: model inferencing time of " << inf_time.count() << "ms " <<
-				   "> current job interval of " << frame_time.count() << "ms!");
+                  ROS_WARN_STREAM("Warning: model inferencing time of "
+                                  << inf_time.count() << "ms "
+                                  << "> current job interval of " << frame_time.count() << "ms!");
 	}
 
 	last_frame_ = this_frame;
@@ -224,8 +233,9 @@ hailo_status HailoPostProcessingStage::DispatchJob(const uint8_t *input, AsyncIn
 	Expected<AsyncInferJob> job_exp = configured_infer_model_->run_async(bindings_);
 	if (!job_exp)
 	{
-		LOG_ERROR("Failed to start async infer job, status = " << job_exp.status());
-		return status;
+          ROS_ERROR_STREAM(
+              "Failed to start async infer job, status = " << job_exp.status());
+          return status;
 	}
 	job = job_exp.release();
 

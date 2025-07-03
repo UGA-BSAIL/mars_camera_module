@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -38,11 +39,19 @@ public:
 	PostProcessingLib &operator=(const PostProcessingLib &other) = delete;
 	~PostProcessingLib();
 
-	const void *GetSymbol(const std::string &symbol);
+        void *GetSymbol(const std::string &symbol);
+        /**
+         * @brief A specialized variant of `GetSymbol` for loading a function.
+         * @param symbol The name of the function to load.
+         * @return A pointer to the loaded function.
+         */
+        template <typename ReturnType, typename... Args>
+        std::function<ReturnType(Args...)> GetFunction(
+            const std::string &symbol);
 
-private:
+       private:
 	void *lib_ = nullptr;
-	std::map<std::string, const void *> symbol_map_;
+	std::map<std::string, void *> symbol_map_;
 	std::mutex lock_;
 };
 

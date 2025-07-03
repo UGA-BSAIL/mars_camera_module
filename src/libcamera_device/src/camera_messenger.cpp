@@ -127,8 +127,11 @@ void CameraMessenger::Start() {
   camera_app_->SetEncodeOutputReadyCallback(std::bind(
       &CameraMessenger::TranslateEncoded, this, kStd1, kStd2, kStd3, kStd4));
 
-  ROS_DEBUG_STREAM("Opening camera.");
-  camera_app_->OpenCamera();
+  if (!camera_open_) {
+    ROS_DEBUG_STREAM("Opening camera.");
+    camera_app_->OpenCamera();
+    camera_open_ = true;
+  }
   camera_app_->ConfigureVideo(RPiCamEncoder::FLAG_VIDEO_NONE);
 
   // Stream info isn't available until after the camera is configured.
@@ -149,7 +152,7 @@ void CameraMessenger::Stop() {
   camera_app_->StopCamera();
   camera_app_->StopEncoder();
   camera_app_->Teardown();
-  camera_app_->CloseCamera();
+//  camera_app_->CloseCamera();
 }
 
 bool CameraMessenger::WaitForFrame() {
@@ -213,6 +216,8 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->afWindow_y = new_options.afWindow_y;
   options->afWindow_width = new_options.afWindow_width;
   options->afWindow_height = new_options.afWindow_height;
+  options->post_process_libs = new_options.post_process_libs;
+  options->post_process_file = new_options.post_process_file;
 }
 
 void CameraMessenger::SetFocusLocked(bool locked) {

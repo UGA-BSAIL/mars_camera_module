@@ -2,11 +2,15 @@ cmake_minimum_required(VERSION 3.6)
 
 include(GNUInstallDirs)
 
-add_custom_target(PostprocLibCpp ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR} -P ${CMAKE_CURRENT_LIST_DIR}/postproc_lib.cmake)
+add_custom_target(PostprocLibCpp ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DCATKIN_DEVEL_PREFIX=${CATKIN_DEVEL_PREFIX}
+        -P ${CMAKE_CURRENT_LIST_DIR}/postproc_lib.cmake)
 set_source_files_properties(postproc_lib.cpp PROPERTIES GENERATED 1)
 
 set(SRC post_processing_stage.cpp negate_stage.cpp hdr_stage.cpp pwl.cpp histogram.cpp motion_detect_stage.cpp postproc_lib.cpp)
 set(TARGET_LIBS images)
+
+add_subdirectory(hailo)
 
 if (NOT DEFINED ENABLE_OPENCV)
     set(ENABLE_OPENCV 1)
@@ -72,3 +76,4 @@ install(FILES
     ${INCLUDE_INSTALL_DIR}/${PROJECT_NAME}/post_processing_stages
     COMPONENT Devel
 )
+

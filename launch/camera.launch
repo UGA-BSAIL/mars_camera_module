@@ -32,8 +32,8 @@
     </include>
 
     <!-- HAILO flower detection -->
-    <include file="$(find hailo_model_runner)/launch/hailo_flower_detection.launch">
-    	<arg name="model_dir" value="$(arg model_dir)" />
-    	<arg name="camera_id" value="$(arg node_name)" />
-    </include>
+<!--     <include file="$(find hailo_model_runner)/launch/hailo_flower_detection.launch"> -->
+<!--     	<arg name="model_dir" value="$(arg model_dir)" /> -->
+<!--     	<arg name="camera_id" value="$(arg node_name)" /> -->
+<!--     </include> -->
 </launch>

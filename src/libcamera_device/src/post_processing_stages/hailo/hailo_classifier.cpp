@@ -5,9 +5,9 @@
  * hailo_classifier.cpp - Hailo inference for classifier network
  */
 
-#include <algorithm>
+#include <ros/ros.h>
+
 #include <array>
-#include <cmath>
 #include <hailo/hailort.hpp>
 #include <sstream>
 #include <string>
@@ -18,7 +18,7 @@
 #include "hailo_postprocessing_stage.hpp"
 
 using Size = libcamera::Size;
-using PostProcFuncPtr = void (*)(HailoROIPtr);
+using PostProcFuncPtr = void const (*)(HailoROIPtr);
 
 #define NAME "hailo_classifier"
 #define POSTPROC_LIB "libclassification.so"
@@ -73,7 +73,7 @@ bool HailoClassifier::Process(CompletedRequestPtr &completed_request)
 {
 	if (!HailoPostProcessingStage::Ready())
 	{
-		LOG_ERROR("HailoRT not ready!");
+		ROS_ERROR_STREAM("HailoRT not ready!");
 		return false;
 	}
 
@@ -114,14 +114,14 @@ bool HailoClassifier::Process(CompletedRequestPtr &completed_request)
 	}
 	else
 	{
-		LOG_ERROR("Unexpected lores format " << low_res_info_.pixel_format);
+		ROS_ERROR_STREAM("Unexpected lores format " << low_res_info_.pixel_format);
 		return false;
 	}
 
 	std::vector<HailoClassificationPtr> results = runInference(input_ptr);
 	if (results.size())
 	{
-		LOG(2, "Result: " << results[0]->get_label());
+		ROS_INFO_STREAM("Result: " << results[0]->get_label());
 		completed_request->post_process_metadata.Set("annotate.text", results[0]->get_label());
 	}
 
@@ -142,7 +142,7 @@ std::vector<HailoClassificationPtr> HailoClassifier::runInference(uint8_t *frame
 	status = job.wait(1s);
 	if (status != HAILO_SUCCESS)
 	{
-		LOG_ERROR("Failed to wait for inference to finish, status = " << status);
+		ROS_ERROR_STREAM("Failed to wait for inference to finish, status = " << status);
 		return {};
 	}
 

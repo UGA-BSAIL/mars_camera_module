@@ -5,3 +5,6 @@ devel/
 .idea/
 
 .venv/
+
+tappas_*_linux_installer.zip
+*.deb

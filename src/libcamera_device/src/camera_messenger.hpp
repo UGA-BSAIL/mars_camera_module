@@ -68,6 +68,8 @@ class CameraMessenger {
  private:
   /// True iff camera is currently running.
   bool camera_running_ = false;
+  /// True iff camera is currently open.
+  bool camera_open_ = false;
   /// Camera app that we will read frames from.
   std::unique_ptr<RPiCamEncoder> camera_app_;
   /// Information about the video stream from the camera.

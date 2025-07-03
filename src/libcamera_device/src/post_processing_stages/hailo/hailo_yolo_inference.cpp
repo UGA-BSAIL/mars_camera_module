@@ -7,6 +7,7 @@
 
 #include <libcamera/controls.h>
 #include <libcamera/geometry.h>
+#include <ros/ros.h>
 
 #include <algorithm>
 #include <array>
@@ -133,13 +134,13 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request)
 {
 	if (!HailoPostProcessingStage::Ready())
 	{
-		LOG_ERROR("HailoRT not ready!");
+		ROS_ERROR_STREAM("HailoRT not ready!");
 		return false;
 	}
 
 	if (low_res_info_.width != InputTensorSize().width || low_res_info_.height != InputTensorSize().height)
 	{
-		LOG_ERROR("Wrong low res size, expecting " << InputTensorSize().toString());
+		ROS_ERROR_STREAM("Wrong low res size, expecting " << InputTensorSize().toString());
 		return false;
 	}
 
@@ -180,7 +181,7 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request)
 	}
 	else
 	{
-		LOG_ERROR("Unexpected lores format " << low_res_info_.pixel_format);
+		ROS_ERROR_STREAM("Unexpected lores format " << low_res_info_.pixel_format);
 		return false;
 	}
 
@@ -245,7 +246,7 @@ std::vector<Detection> YoloInference::runInference(const uint8_t *frame, const s
 	status = job.wait(1s);
 	if (status != HAILO_SUCCESS)
 	{
-		LOG_ERROR("Failed to wait for inference to finish, status = " << status);
+		ROS_ERROR_STREAM("Failed to wait for inference to finish, status = " << status);
 		return {};
 	}
 
@@ -255,7 +256,7 @@ std::vector<Detection> YoloInference::runInference(const uint8_t *frame, const s
 	filter(roi, yolo_params_);
 	std::vector<HailoDetectionPtr> detections = hailo_common::get_hailo_detections(roi);
 
-	LOG(2, "------");
+	ROS_INFO_STREAM("------");
 
 	// Translate results to the rpicam-apps Detection objects
 	std::vector<Detection> results;
@@ -272,13 +273,13 @@ std::vector<Detection> YoloInference::runInference(const uint8_t *frame, const s
 		const float y1 = std::min(box.ymax(), 1.0f);
 		libcamera::Rectangle r = ConvertInferenceCoordinates({ x0, y0, x1 - x0, y1 - y0 }, scaler_crops);
 		results.emplace_back(d->get_class_id(), d->get_label(), d->get_confidence(), r.x, r.y, r.width, r.height);
-		LOG(2, "Object: " << results.back().toString());
+		ROS_INFO_STREAM("Object: " << results.back().toString());
 
 		if (--max_detections_ == 0)
 			break;
 	}
 
-	LOG(2, "------");
+	ROS_INFO_STREAM("------");
 
 	return results;
 }

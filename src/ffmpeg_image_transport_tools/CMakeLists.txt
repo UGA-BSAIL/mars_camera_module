@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(ffmpeg_image_transport_tools)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall")
+set(CMAKE_CXX_STANDARD 17)
 
 find_package(catkin REQUIRED COMPONENTS roscpp nodelet rosbag cv_bridge
 image_transport ffmpeg_image_transport_msgs ffmpeg_image_transport
