@@ -258,12 +258,16 @@ HailoROIPtr HailoPostProcessingStage::MakeROI(const std::vector<OutTensor> &outp
 		info.name[HAILO_MAX_STREAM_NAME_SIZE - 1] = '\0';
 		info.format = t.format;
 		info.quant_info = t.quant_info;
-		if (HailoRTCommon::is_nms(info))
-			info.nms_shape = infer_model_->outputs()[0].get_nms_shape().release();
-		else
-			info.shape = t.shape;
+                if (HailoRTCommon::is_nms(info)) {
+                  info.nms_shape = infer_model_->output(info.name)
+                                       .release()
+                                       .get_nms_shape()
+                                       .release();
+                } else {
+                  info.shape = t.shape;
+                }
 
-		roi->add_tensor(std::make_shared<HailoTensor>(t.data.get(), info));
+                roi->add_tensor(std::make_shared<HailoTensor>(t.data.get(), info));
 	}
 
 	return roi;

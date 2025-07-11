@@ -5,22 +5,18 @@
  * hailo_yolo_inference.cpp - Hailo inference for yolo5/7/8 models
  */
 
+#include "hailo_yolo_inference.hpp"
+
 #include <libcamera/controls.h>
-#include <libcamera/geometry.h>
 #include <ros/ros.h>
+#include <hailort_common.hpp>
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <filesystem>
 #include <mutex>
 #include <string>
-#include <vector>
 
-#include "../../core/rpicam_app.hpp"
-#include "../object_detect.hpp"
-#include "detection/yolo_postprocess.hpp"
-#include "hailo_postprocessing_stage.hpp"
 
 using Size = libcamera::Size;
 using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams *);
@@ -33,49 +29,6 @@ namespace fs = std::filesystem;
 
 #define NAME "hailo_yolo_inference"
 #define POSTPROC_LIB_NMS "libyolo_hailortpp_post.so"
-
-class YoloInference : public HailoPostProcessingStage
-{
-public:
-	YoloInference(RPiCamApp *app);
-	~YoloInference();
-
-	char const *Name() const override;
-
-	void Read(boost::property_tree::ptree const &params) override;
-
-	void Configure() override;
-
-	bool Process(CompletedRequestPtr &completed_request) override;
-
-private:
-	std::vector<Detection> runInference(const uint8_t *frame, const std::vector<libcamera::Rectangle> &scaler_crops);
-	void filterOutputObjects(std::vector<Detection> &objects);
-
-	struct LtObject
-	{
-		Detection params;
-		unsigned int visible;
-		unsigned int hidden;
-		bool matched;
-	};
-
-	std::vector<LtObject> lt_objects_;
-	std::mutex lock_;
-	PostProcessingLib postproc_nms_;
-	YoloParams *yolo_params_ = nullptr;
-
-	// Config params
-	std::string config_path_;
-	std::string arch_;
-	unsigned int max_detections_;
-	float threshold_;
-	bool temporal_filtering_;
-	float tolerance_;
-	float factor_;
-	unsigned int visible_frames_;
-	unsigned int hidden_frames_;
-};
 
 YoloInference::YoloInference(RPiCamApp *app)
 	: HailoPostProcessingStage(app), postproc_nms_(PostProcLibDir(POSTPROC_LIB_NMS))
@@ -201,9 +154,10 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request)
 		scaler_crops.push_back(*scaler_crop);
 	}
 
-	std::vector<Detection> objects = runInference(input_ptr, scaler_crops);
-	if (objects.size())
-	{
+        std::vector<OutTensor> output_tensors;
+        std::vector<Detection> objects =
+            runInference(input_ptr, scaler_crops, output_tensors);
+        if (objects.size()) {
 		if (temporal_filtering_)
 		{
 			// Process() can be concurrently called through different threads for consecutive CompletedRequests if
@@ -226,62 +180,87 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request)
 			completed_request->post_process_metadata.Set("object_detect.results", objects);
 	}
 
+        // Save the appearance features as well.
+        for (const auto &output : output_tensors) {
+          if (!hailort::HailoRTCommon::is_nms(output.format.order)) {
+            // This is the appearance feature.
+            completed_request->post_process_metadata.Set("appearance_features", output);
+          }
+        }
+
 	return false;
 }
 
-std::vector<Detection> YoloInference::runInference(const uint8_t *frame, const std::vector<Rectangle> &scaler_crops)
-{
-	hailort::AsyncInferJob job;
-	std::vector<OutTensor> output_tensors;
-	hailo_status status;
+bool YoloInference::runHailoJob(const uint8_t *frame,
+                                std::vector<OutTensor> &output_tensors) {
+  hailort::AsyncInferJob job;
+  hailo_status status;
 
-	status = HailoPostProcessingStage::DispatchJob(frame, job, output_tensors);
-	if (status != HAILO_SUCCESS)
-		return {};
+  status = HailoPostProcessingStage::DispatchJob(frame, job, output_tensors);
+  if (status != HAILO_SUCCESS) {
+    ROS_ERROR_STREAM("Failed to dispatch HAILO job, status = " << status);
+    return false;
+  }
 
-	// Prepare tensors for postprocessing.
-	std::sort(output_tensors.begin(), output_tensors.end(), OutTensor::SortFunction);
+  // Prepare tensors for postprocessing.
+  std::sort(output_tensors.begin(), output_tensors.end(),
+            OutTensor::SortFunction);
 
-	// Wait for job completion.
-	status = job.wait(1s);
-	if (status != HAILO_SUCCESS)
-	{
-		ROS_ERROR_STREAM("Failed to wait for inference to finish, status = " << status);
-		return {};
-	}
+  // Wait for job completion.
+  status = job.wait(1s);
+  if (status != HAILO_SUCCESS) {
+    ROS_ERROR_STREAM(
+        "Failed to wait for inference to finish, status = " << status);
+    return false;
+  }
 
-	HailoROIPtr roi = MakeROI(output_tensors);
-	PostProcFuncPtrNms filter = reinterpret_cast<PostProcFuncPtrNms>(postproc_nms_.GetSymbol("filter"));
+  return true;
+}
 
-	filter(roi, yolo_params_);
-	std::vector<HailoDetectionPtr> detections = hailo_common::get_hailo_detections(roi);
+std::vector<Detection> YoloInference::runInference(
+    const uint8_t *frame, const std::vector<Rectangle> &scaler_crops,
+    std::vector<OutTensor> &output_tensors) {
+  if (!runHailoJob(frame, output_tensors)) {
+    return {};
+  }
 
-	ROS_INFO_STREAM("------");
+  // Only do this post-processing for box outputs. Auxiliary outputs will not
+  // be touched.
+  std::vector<OutTensor> box_output_tensors;
+  for (auto &t : output_tensors) {
+    if (hailort::HailoRTCommon::is_nms(t.format.order)) {
+      box_output_tensors.push_back(t);
+    }
+  }
 
-	// Translate results to the rpicam-apps Detection objects
-	std::vector<Detection> results;
-	for (auto const &d : detections)
-	{
-		if (d->get_confidence() < threshold_)
-			continue;
+  HailoROIPtr roi = MakeROI(box_output_tensors);
+  PostProcFuncPtrNms filter =
+      reinterpret_cast<PostProcFuncPtrNms>(postproc_nms_.GetSymbol("filter"));
 
-		// Extract bounding box co-ordinates in the output image co-ordinates.
-		auto const &box = d->get_bbox();
-		const float x0 = std::max(box.xmin(), 0.0f);
-		const float x1 = std::min(box.xmax(), 1.0f);
-		const float y0 = std::max(box.ymin(), 0.0f);
-		const float y1 = std::min(box.ymax(), 1.0f);
-		libcamera::Rectangle r = ConvertInferenceCoordinates({ x0, y0, x1 - x0, y1 - y0 }, scaler_crops);
-		results.emplace_back(d->get_class_id(), d->get_label(), d->get_confidence(), r.x, r.y, r.width, r.height);
-		ROS_INFO_STREAM("Object: " << results.back().toString());
+  filter(roi, yolo_params_);
+  std::vector<HailoDetectionPtr> detections =
+      hailo_common::get_hailo_detections(roi);
 
-		if (--max_detections_ == 0)
-			break;
-	}
+  // Translate results to the rpicam-apps Detection objects
+  std::vector<Detection> results;
+  for (auto const &d : detections) {
+    if (d->get_confidence() < threshold_) continue;
 
-	ROS_INFO_STREAM("------");
+    // Extract bounding box co-ordinates in the output image co-ordinates.
+    auto const &box = d->get_bbox();
+    const float x0 = std::max(box.xmin(), 0.0f);
+    const float x1 = std::min(box.xmax(), 1.0f);
+    const float y0 = std::max(box.ymin(), 0.0f);
+    const float y1 = std::min(box.ymax(), 1.0f);
+    libcamera::Rectangle r =
+        ConvertInferenceCoordinates({x0, y0, x1 - x0, y1 - y0}, scaler_crops);
+    results.emplace_back(d->get_class_id(), d->get_label(), d->get_confidence(),
+                         r.x, r.y, r.width, r.height);
 
-	return results;
+    if (--max_detections_ == 0) break;
+  }
+
+  return results;
 }
 
 void YoloInference::filterOutputObjects(std::vector<Detection> &objects)
