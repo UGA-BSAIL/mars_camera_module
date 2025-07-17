@@ -14,6 +14,7 @@ using namespace cv;
 
 using Rectange = libcamera::Rectangle;
 using Stream = libcamera::Stream;
+using Detection = postproc::Detection;
 
 class ObjectDetectDrawCvStage : public PostProcessingStage
 {

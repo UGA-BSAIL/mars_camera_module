@@ -2,9 +2,9 @@
 
 #include <hailort.h>
 #include <libcamera/pixel_format.h>
-#include <libcamera_device/Detection.h>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
+#include <libcamera_device/Detection.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -14,13 +14,7 @@
 #include <vector>
 
 #include "post_processing_stages/hailo/hailo_postprocessing_stage.hpp"
-
-namespace rpi_cam {
-
-// Wrap in a namespace to avoid name conflicts.
 #include "post_processing_stages/object_detect.hpp"
-
-}  // namespace rpi_cam
 
 namespace libcamera_device {
 namespace {
@@ -144,7 +138,7 @@ void CameraMessenger::TranslateDetections(
   detections_message.header.frame_id = frame_id_;
 
   // Convert each detection.
-  std::vector<rpi_cam::Detection> detections;
+  std::vector<postproc::Detection> detections;
   completed_request->post_process_metadata.Get("object_detect.results",
                                                detections);
   // It's normal for the "object_detect.results" tag to not be set if we don't
@@ -153,7 +147,6 @@ void CameraMessenger::TranslateDetections(
   const auto kFrameWidth = static_cast<float>(stream_info_.width);
   const auto kFrameHeight = static_cast<float>(stream_info_.height);
   for (const auto &detection : detections) {
-    // Fully quality the namespace here to avoid name conflicts.
     Detection ros_detection;
     ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
     ros_detection.center_y = static_cast<float>(detection.box.y) / kFrameHeight;

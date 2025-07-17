@@ -32,14 +32,14 @@ class YoloInference : public HailoPostProcessingStage {
   bool runHailoJob(const uint8_t *frame,
                    std::vector<OutTensor> &output_tensors);
 
-  virtual std::vector<Detection> runInference(
+  virtual std::vector<postproc::Detection> runInference(
       const uint8_t *frame,
       const std::vector<libcamera::Rectangle> &scaler_crops,
       std::vector<OutTensor> &output_tensors);
-  void filterOutputObjects(std::vector<Detection> &objects);
+  void filterOutputObjects(std::vector<postproc::Detection> &objects);
 
   struct LtObject {
-    Detection params;
+    postproc::Detection params;
     unsigned int visible;
     unsigned int hidden;
     bool matched;

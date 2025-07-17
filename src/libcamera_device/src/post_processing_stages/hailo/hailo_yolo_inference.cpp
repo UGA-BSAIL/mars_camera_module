@@ -21,6 +21,7 @@ using Size = libcamera::Size;
 using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams *);
 using InitFuncPtr = YoloParams *(*)(std::string, std::string);
 using FreeFuncPtr = void (*)(void *);
+using Detection = postproc::Detection;
 
 using Rectangle = libcamera::Rectangle;
 
