@@ -12,6 +12,8 @@
     <arg name="quality" default="2"/>
     <!-- The maximum FPS to allow from the camera. -->
     <arg name="fps" default="30"/>
+    <!-- The file defining the post-processing configuration to use. -->
+    <arg name="postprocess_file" default=""/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/qmax" value="$(arg quality)"/>
@@ -23,6 +25,7 @@
         <param name="height" value="1080"/>
         <param name="frame_id" value="$(arg frame_id)"/>
         <param name="device_id" value="$(arg device_id)"/>
+        <param name="postprocess_file" value="$(arg postprocess_file)"/>
     	<remap from="detections" to="/$(arg node_name)/detections"/>
     </node>
 </launch>

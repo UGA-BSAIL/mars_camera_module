@@ -11,7 +11,7 @@
 
     "hailo_yolo_inference":
     {
-        "hef_file": "/home/bsail/models/flowers/flower_detection_model.hef",
+        "hef_file": "/usr/share/hailo-models/flowers/flower_detection_model.hef",
         "max_detections": 50,
         "threshold": 0.3
     }
