@@ -4,6 +4,7 @@
 
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
+#include <libcamera_device/FrameDetections.h>
 #include <libcamera_device/LibcameraDeviceConfig.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
@@ -19,10 +20,10 @@
 
 using dynamic_reconfigure::Server;
 using image_transport::ImageTransport;
-using image_transport::Publisher;
 using libcamera_device::CameraMessenger;
 using libcamera_device::LibcameraDeviceConfig;
 using sensor_msgs::Image;
+using ImagePublisher = image_transport::Publisher;
 
 namespace {
 
@@ -44,8 +45,18 @@ struct StaticConfig {
  * @param publisher Will be used for publishing images.
  * @param image The image to publish.
  */
-void PublishEncoded(Publisher *publisher, const Image &image) {
+void PublishEncoded(ImagePublisher *publisher, const Image &image) {
   publisher->publish(image);
+}
+
+/**
+ * Publishes camera detections. This is meant to be used as a callback.
+ * @param publisher Will be used for publishing detections.
+ * @param detections The detections to publish.
+ */
+void PublishDetections(ros::Publisher *publisher,
+                       const libcamera_device::FrameDetections &detections) {
+  publisher->publish(detections);
 }
 
 /**
@@ -134,13 +145,16 @@ void ReconfigureParams(CameraMessenger *messenger,
 /**
  * @brief Ensures there is at least one subscriber to the camera topic(s) before
  *  continuing. If there is not one, it will stop the camera until there is.
- * @param publisher The camera publisher.
+ * @param image_publisher The camera image publisher.
+ * @param detection_publisher The camera detection publisher.
  * @param node The node handle.
  * @param camera The camera itself.
  */
-void WaitForSubscriber(const Publisher &publisher, const ros::NodeHandle &node,
-                       CameraMessenger *camera) {
-  if (publisher.getNumSubscribers() > 0) {
+void WaitForSubscriber(ImagePublisher &image_publisher,
+                       ros::Publisher &detection_publisher,
+                       const ros::NodeHandle &node, CameraMessenger *camera) {
+  if (image_publisher.getNumSubscribers() > 0 ||
+      detection_publisher.getNumSubscribers() > 0) {
     // We already have a subscriber, so we're done before we even started.
     return;
   }
@@ -151,7 +165,8 @@ void WaitForSubscriber(const Publisher &publisher, const ros::NodeHandle &node,
   // running the camera.
   camera->Stop();
   ROS_INFO_STREAM("Waiting for a camera subscriber...");
-  while (node.ok() && publisher.getNumSubscribers() == 0) {
+  while (node.ok() && image_publisher.getNumSubscribers() == 0 &&
+         detection_publisher.getNumSubscribers() == 0) {
     rate.sleep();
     ros::spinOnce();
   }
@@ -174,9 +189,13 @@ int main(int argc, char **argv) {
 
   ROS_INFO_STREAM("Starting camera node for device " << device_id << " and frame " << frame_id << "...");
 
+  // Create a publisher for images.
   ImageTransport image_transport(node);
   auto image_publisher =
       image_transport.advertise(ros::this_node::getName(), 1);
+  // Create a publisher for detections.
+  auto detection_publisher =
+      node.advertise<libcamera_device::FrameDetections>("detections", 10);
 
   Server<LibcameraDeviceConfig> param_server;
 
@@ -193,6 +212,8 @@ int main(int argc, char **argv) {
                          default_video_options);
   camera.SetMessageReadyCallback(
       std::bind(PublishEncoded, &image_publisher, kStd1));
+  camera.SetDetectionsReadyCallback(
+      std::bind(PublishDetections, &detection_publisher, kStd1));
 
   // Configure the dynamic reconfiguration callback.
   Server<LibcameraDeviceConfig>::CallbackType reconfigure_callback =
@@ -207,7 +228,7 @@ int main(int argc, char **argv) {
   }
   ROS_DEBUG_STREAM("Camera initialized!");
   while (node.ok() && camera.WaitForFrame()) {
-    WaitForSubscriber(image_publisher, node, &camera);
+    WaitForSubscriber(image_publisher, detection_publisher, node, &camera);
     ros::spinOnce();
   }
 

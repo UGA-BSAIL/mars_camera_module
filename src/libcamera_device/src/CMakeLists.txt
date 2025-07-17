@@ -16,5 +16,6 @@ target_compile_features(${PROJECT_NAME}_node PRIVATE cxx_std_17)
 target_link_libraries(${PROJECT_NAME}_node
         ${catkin_LIBRARIES}
         ${LIBCAMERA_LIBRARIES}
-        libcamera_app)
-add_dependencies(${PROJECT_NAME}_node ${PROJECT_NAME}_gencfg)
+        libcamera_app
+        hailo-postproc)
+add_dependencies(${PROJECT_NAME}_node ${PROJECT_NAME}_gencfg ${PROJECT_NAME}_generate_messages_cpp)

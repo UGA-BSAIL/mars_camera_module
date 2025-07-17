@@ -3,10 +3,11 @@
 
 #include <sensor_msgs/Image.h>
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
+
+#include <libcamera_device/FrameDetections.h>
 
 #include "core/rpicam_encoder.hpp"
 #include "core/video_options.hpp"
@@ -24,6 +25,11 @@ class CameraMessenger {
    *    produced. It takes a single argument, which is the message.
    */
   using MessageReadyCallback = std::function<void(const sensor_msgs::Image &)>;
+  /**
+   * @brief Type of the callback that will be fired whenever a new detection
+   *    message is produced. It takes a single argument, which is the message.
+   */
+  using DetectionsReadyCallback = std::function<void(const FrameDetections &)>;
 
   /**
    * @param camera_app The camera app to read data from.
@@ -53,6 +59,11 @@ class CameraMessenger {
    * @param callback The callback to set.
    */
   void SetMessageReadyCallback(const MessageReadyCallback &callback);
+  /**
+   * Sets the callback that will be invoked whenever new detections are ready.
+   * @param callback The callback to set.
+   */
+  void SetDetectionsReadyCallback(const DetectionsReadyCallback &callback);
 
   /**
    * @brief Sets new options for the camera.
@@ -81,12 +92,16 @@ class CameraMessenger {
 
   /// Callback to invoke when a new message is ready.
   MessageReadyCallback on_message_ready_;
+  /// Callback to invoke when new detections are ready.
+  DetectionsReadyCallback on_detections_ready_;
 
   /// Maintains the sequence number for messages we produce.
-  uint32_t message_sequence_ = 0;
+  uint32_t image_message_sequence_ = 0;
+  uint32_t detection_message_seqeunce_ = 0;
 
   /**
    * Callback for the encoder that translates an image into a ROS message.
+   * Will call the proper callback internally.
    * @param buffer The buffer containing the image data.
    * @param buffer_size The size of the buffer in bytes.
    * @param timestamp_us The associated timestamp, in microseconds.
@@ -94,6 +109,12 @@ class CameraMessenger {
    */
   void TranslateEncoded(void *buffer, size_t buffer_size, int64_t timestamp_us,
                         uint32_t flags);
+  /**
+   * Callback for the encoder that translates a camera message into a ROS
+   * message. Will call the proper callback internally.
+   * @param completed_request The camera message.
+   */
+  void TranslateDetections(const CompletedRequestPtr &completed_request);
 
   /**
    * @brief Updates the stream information, based on the currently-configured

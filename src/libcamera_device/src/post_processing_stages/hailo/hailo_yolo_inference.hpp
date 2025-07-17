@@ -31,12 +31,6 @@ class YoloInference : public HailoPostProcessingStage {
    */
   bool runHailoJob(const uint8_t *frame,
                    std::vector<OutTensor> &output_tensors);
-  /**
-   * @brief Determines the name of the output for the appearance features.
-   * @param output_tensors The output tensors from the model.
-   * @return The name of the output tensor for the appearance features.
-   */
-  std::string getFeatureOutputName(const std::vector<OutTensor> &output_tensors);
 
   virtual std::vector<Detection> runInference(
       const uint8_t *frame,

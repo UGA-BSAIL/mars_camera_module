@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <hailo/hailort.hpp>
+#include <hailo_objects.hpp>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -18,7 +19,6 @@
 
 #include "../../core/rpicam_app.hpp"
 #include "../post_processing_stage.hpp"
-#include "hailo_objects.hpp"
 #include "hailo_postproc_lib.h"
 
 class Allocator

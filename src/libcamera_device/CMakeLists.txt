@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
         sensor_msgs
         image_transport
         dynamic_reconfigure
+        message_generation
         )
 
 ## System dependencies are found with CMake's conventions
@@ -48,11 +49,11 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+ add_message_files(
+   FILES
+   Detection.msg
+   FrameDetections.msg
+ )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -69,10 +70,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   sensor_msgs
-# )
+ generate_messages(
+   DEPENDENCIES
+   std_msgs
+ )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -105,7 +106,7 @@ generate_dynamic_reconfigure_options(
 catkin_package(
         #  INCLUDE_DIRS include
         #  LIBRARIES libcamera_device
-        #  CATKIN_DEPENDS roscpp sensor_msgs
+        CATKIN_DEPENDS message_runtime
         #  DEPENDS system_lib
 )
 

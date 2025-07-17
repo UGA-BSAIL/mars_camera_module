@@ -1,6 +1,8 @@
 #include "camera_messenger.hpp"
 
+#include <hailort.h>
 #include <libcamera/pixel_format.h>
+#include <libcamera_device/Detection.h>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
 
@@ -9,6 +11,16 @@
 #include <limits>
 #include <map>
 #include <utility>
+#include <vector>
+
+#include "post_processing_stages/hailo/hailo_postprocessing_stage.hpp"
+
+namespace rpi_cam {
+
+// Wrap in a namespace to avoid name conflicts.
+#include "post_processing_stages/object_detect.hpp"
+
+}  // namespace rpi_cam
 
 namespace libcamera_device {
 namespace {
@@ -81,6 +93,11 @@ CameraMessenger::~CameraMessenger() {
 
 void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
                                        int64_t timestamp_us, uint32_t) {
+  if (!on_message_ready_) {
+    // Don't bother with the translation if we don't have a callback.
+    return;
+  }
+
   // Create the message for this image.
   sensor_msgs::Image message;
 
@@ -89,7 +106,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
   const uint64_t kWallTimestampUs = KernelToRosClock(timestamp_us);
   message.header.stamp.sec = kWallTimestampUs / 1000000;
   message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
-  message.header.seq = message_sequence_++;
+  message.header.seq = image_message_sequence_++;
   message.header.frame_id = frame_id_;
 
   message.height = stream_info_.height;
@@ -108,10 +125,84 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
   on_message_ready_(message);
 }
 
+void CameraMessenger::TranslateDetections(
+    const CompletedRequestPtr &completed_request) {
+  FrameDetections detections_message;
+
+  // Sensor timestamps are from the kernel clock, but we want them relative to
+  // the wall clock.
+  if (const auto kSensorTimeNs =
+          completed_request->metadata.get(controls::SensorTimestamp)) {
+    const uint64_t kWallTimestampUs = KernelToRosClock(*kSensorTimeNs / 1000);
+    detections_message.header.stamp.sec = kWallTimestampUs / 1000000;
+    detections_message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
+  } else {
+    // Just use current time.
+    detections_message.header.stamp = ros::Time::now();
+  }
+  detections_message.header.seq = detection_message_seqeunce_++;
+  detections_message.header.frame_id = frame_id_;
+
+  // Convert each detection.
+  std::vector<rpi_cam::Detection> detections;
+  completed_request->post_process_metadata.Get("object_detect.results",
+                                               detections);
+  // It's normal for the "object_detect.results" tag to not be set if we don't
+  // have any detections.
+
+  const auto kFrameWidth = static_cast<float>(stream_info_.width);
+  const auto kFrameHeight = static_cast<float>(stream_info_.height);
+  for (const auto &detection : detections) {
+    // Fully quality the namespace here to avoid name conflicts.
+    Detection ros_detection;
+    ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
+    ros_detection.center_y = static_cast<float>(detection.box.y) / kFrameHeight;
+    ros_detection.width = static_cast<float>(detection.box.width) / kFrameWidth;
+    ros_detection.height =
+        static_cast<float>(detection.box.height) / kFrameHeight;
+    ros_detection.confidence = detection.confidence;
+
+    detections_message.detections.push_back(ros_detection);
+  }
+
+  // Copy the appearance features.
+  std::vector<uint8_t> features;
+  hailo_3d_image_shape_t features_shape{0, 0, 0};
+  if (completed_request->post_process_metadata.Get("object_detect.features",
+                                                   features) ||
+      completed_request->post_process_metadata.Get(
+          "object_detect.features_shape", features_shape)) {
+    // Completed request had no appearance features, HAILO is probably not
+    // active.
+    ROS_DEBUG_STREAM(
+        "A callback for detections was specified, but this frame has no "
+        "appearance features.");
+  }
+  detections_message.appearance_features.resize(features.size());
+  std::copy(features.begin(), features.end(),
+            detections_message.appearance_features.begin());
+  // Batch size is always one.
+  detections_message.appearance_feature_shape[0] = 1;
+  detections_message.appearance_feature_shape[1] = features_shape.height;
+  detections_message.appearance_feature_shape[2] = features_shape.width;
+  detections_message.appearance_feature_shape[3] = features_shape.features;
+
+  // Call the callback with the new message.
+  if (on_detections_ready_) {
+    on_detections_ready_(detections_message);
+  }
+}
+
 void CameraMessenger::SetMessageReadyCallback(
     const CameraMessenger::MessageReadyCallback &callback) {
   ROS_DEBUG_STREAM("Setting new callback for camera messages.");
   on_message_ready_ = callback;
+}
+
+void CameraMessenger::SetDetectionsReadyCallback(
+    const CameraMessenger::DetectionsReadyCallback &callback) {
+  ROS_DEBUG_STREAM("Setting new callback for detections.");
+  on_detections_ready_ = callback;
 }
 
 void CameraMessenger::Start() {
@@ -152,7 +243,6 @@ void CameraMessenger::Stop() {
   camera_app_->StopCamera();
   camera_app_->StopEncoder();
   camera_app_->Teardown();
-//  camera_app_->CloseCamera();
 }
 
 bool CameraMessenger::WaitForFrame() {
@@ -172,13 +262,14 @@ bool CameraMessenger::WaitForFrame() {
     ROS_INFO_STREAM("Got LibCamera quit request.");
     return false;
   }
-  ROS_FATAL_STREAM_COND(
-      message.type != RPiCamEncoder::MsgType::RequestComplete,
-      "Got unrecognized message type " << static_cast<uint32_t>(message.type)
-                                       << " from LibCamera!");
+  ROS_FATAL_STREAM_COND(message.type != RPiCamEncoder::MsgType::RequestComplete,
+                        "Got unrecognized message type "
+                            << static_cast<uint32_t>(message.type)
+                            << " from LibCamera!");
 
   auto &completed_request = std::get<CompletedRequestPtr>(message.payload);
   camera_app_->EncodeBuffer(completed_request, camera_app_->VideoStream());
+  TranslateDetections(completed_request);
 
   return true;
 }
