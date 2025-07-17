@@ -15,7 +15,7 @@
     <!-- The file defining the post-processing configuration to use. -->
     <arg name="postprocess_file" default=""/>
 
-    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen" launch-prefix="gdb --args">
+    <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/qmax" value="$(arg quality)"/>
         <param name="ffmpeg/encoder" value="$(arg encoder)"/>
         <param name="ffmpeg/profile" value="baseline" />

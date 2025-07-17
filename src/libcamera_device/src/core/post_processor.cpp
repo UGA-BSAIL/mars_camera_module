@@ -121,8 +121,8 @@ void PostProcessor::Read(std::string const &filename)
 			if (node.find("lores") != node.not_found())
 			{
 				static std::map<std::string, libcamera::PixelFormat> formats {
-					{ "rgb", libcamera::formats::BGR888 },
-					{ "bgr", libcamera::formats::RGB888 },
+					{ "rgb", libcamera::formats::RGB888 },
+					{ "bgr", libcamera::formats::BGR888 },
 					{ "yuv420", libcamera::formats::YUV420 },
 				};
 

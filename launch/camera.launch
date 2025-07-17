@@ -21,14 +21,14 @@
             <arg name="postprocess_file" value="$(arg postprocess_file)" />
     </include>
     <!-- IR camera -->
-<!--     <include file="$(find libcamera_device)/launch/full_hd_video.launch"> -->
-<!--         <arg name="node_name" value="$(arg node_name)_ir" /> -->
-<!--         <arg name="frame_id" value="$(arg frame_id)_ir" /> -->
-<!--         <arg name="device_id" value="1"/> -->
-<!--         <arg name="quality" value="8"/> -->
-<!--         <arg name="encoder" value="$(arg encoder)" /> -->
-<!--         <arg name="fps" value="24" /> -->
-<!--     </include> -->
+    <include file="$(find libcamera_device)/launch/full_hd_video.launch">
+        <arg name="node_name" value="$(arg node_name)_ir" />
+        <arg name="frame_id" value="$(arg frame_id)_ir" />
+        <arg name="device_id" value="1"/>
+        <arg name="quality" value="8"/>
+        <arg name="encoder" value="$(arg encoder)" />
+        <arg name="fps" value="24" />
+    </include>
     <include file="$(find mars_camera_hw_manager)/launch/manager.launch">
         <arg name="camera_id" value="$(arg node_name)" />
     </include>
