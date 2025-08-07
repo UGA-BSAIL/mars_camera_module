@@ -31,6 +31,7 @@ FFMPEGDecoder::FFMPEGDecoder() {
   codecMap_["h264_v4l2m2m"] = {"h264"};
   codecMap_["libx264"] = {"h264"};
   codecMap_["hevc_nvenc"] = {"hevc_cuvid", "hevc"};
+  codecMap_["mjpeg"] = {"mjpeg"};
 }
 
 FFMPEGDecoder::~FFMPEGDecoder() { reset(); }
