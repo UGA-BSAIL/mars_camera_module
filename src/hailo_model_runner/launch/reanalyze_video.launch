@@ -12,7 +12,8 @@
         args="ffmpeg in:=/$(arg camera_id) raw out:=/$(arg camera_id)/image_decompressed " output="screen" required="true">
     </node>
     <!-- Runs inference on the HAILO with camera frames. -->
-    <node name="hailo_inference" pkg="hailo_model_runner" type="hailo_inference" output="screen" required="true">
+    <node name="hailo_inference_$(arg camera_id)" pkg="hailo_model_runner"
+          type="hailo_inference" output="screen" required="true">
     	<param name="hef_file_path" value="$(arg hef_file_path)"/>
     	<remap from="~image" to="/$(arg camera_id)/image_decompressed"/>
     	<remap from="~detections" to="/$(arg camera_id)/detections"/>

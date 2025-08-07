@@ -132,7 +132,7 @@ class HailoInferenceManager:
             height, width, channels
         )
         # Convert from BGR to RGB.
-        #img_np = img_np[:, :, ::-1]
+        img_np = img_np[:, :, ::-1]
 
         # If the image is grayscale, convert it to RGB
         if channels == 1:
@@ -228,52 +228,6 @@ class HailoInferenceManager:
         publisher.publish(frame_detections)
 
 
-class DetectionsSubscribeListener(rospy.SubscribeListener):
-    """
-    Listens for subscribe/unsubscribe events. It will start and stop the detection pipeline
-    based on whether any one is subscribed to the detections topic.
-    """
-
-    def __init__(self, inference_manager: HailoInferenceManager):
-        """
-        Args:
-            inference_manager: The inference manager to use for handling images.
-
-        """
-        super().__init__()
-
-        self.__inference_manager = inference_manager
-        self.__subscriber = None
-        # Tracks number of subscribers.
-        self.__num_subscribers = 0
-
-    def peer_subscribe(self, *_) -> None:
-        if not self.__num_subscribers:
-            # Subscribe to the image topic.
-            rospy.loginfo(
-                "Detections subscriber connected. Starting detection pipeline."
-            )
-            self.__subscriber = rospy.Subscriber(
-                "~image",
-                Image,
-                self.__inference_manager.on_image_received,
-                queue_size=1,
-            )
-
-        self.__num_subscribers += 1
-
-    def peer_unsubscribe(self, _1, _2) -> None:
-        self.__num_subscribers -= 1
-
-        if not self.__num_subscribers and self.__subscriber is not None:
-            # Unsubscribe from the image topic.
-            rospy.loginfo(
-                "Detections subscriber disconnected. Stopping detection pipeline."
-            )
-            self.__subscriber.unregister()
-            self.__subscriber = None
-
-
 def main() -> None:
     # Initialize the ROS node.
     rospy.init_node("hailo_inference")
@@ -287,7 +241,12 @@ def main() -> None:
         "~detections",
         FrameDetections,
         queue_size=10,
-        subscriber_listener=DetectionsSubscribeListener(inference_manager),
+    )
+    rospy.Subscriber(
+        "~image",
+        Image,
+        inference_manager.on_image_received,
+        queue_size=1,
     )
     inference_manager.start()
 
