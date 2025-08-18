@@ -85,6 +85,8 @@ class CameraMessenger {
   std::unique_ptr<RPiCamEncoder> camera_app_;
   /// Information about the video stream from the camera.
   StreamInfo stream_info_;
+  /// Information about the lores stream from the camera.
+  StreamInfo lores_stream_info_;
   /// Associated ROS pixel format.
   std::string ros_pixel_format_;
   /// The frame ID to use for sent messages.

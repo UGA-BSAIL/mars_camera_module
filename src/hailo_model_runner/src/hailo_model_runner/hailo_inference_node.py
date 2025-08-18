@@ -9,6 +9,7 @@ import threading
 from typing import Tuple
 import time
 
+import cv2
 import rospy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Header
@@ -205,10 +206,11 @@ class HailoInferenceManager:
         boxes = boxes[:, :-1]
         centers = 0.5 * (boxes[:, :2] + boxes[:, 2:])
         sizes = boxes[:, 2:] - boxes[:, :2]
+        print(centers, sizes)
         detections = []
         for center, size, confidence in zip(centers, sizes, confidences):
-            center_x, center_y = center
-            width, height = size
+            center_y, center_x = center
+            height, width = size
             detections.append(
                 Detection(
                     center_x=center_x,
