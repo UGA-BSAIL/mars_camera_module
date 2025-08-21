@@ -20,7 +20,15 @@
     <rosparam param="image_topics">
       ["/camera0/ffmpeg",
        "/camera1/ffmpeg",
-       "/camera2/ffmpeg"
+       "/camera2/ffmpeg",
+       "/camera3/ffmpeg",
+       "/camera3_ir/ffmpeg",
+       "/camera4/ffmpeg",
+       "/camera4_ir/ffmpeg",
+       "/camera5/ffmpeg",
+       "/camera5_ir/ffmpeg",
+       "/camera6/ffmpeg",
+       "/camera6_ir/ffmpeg",
       ]
     </rosparam>
     <param name="write_time_stamps" value="$(arg write_time_stamps)"/>

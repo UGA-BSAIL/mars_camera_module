@@ -93,12 +93,12 @@ def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
 
 
 def _transcode_video(
-    *,
-    input_file: Path,
-    output_file: Path,
-    encoder: str = "h264",
-    decoder: str = "h264",
-    bitrate: str = "24M",
+        *,
+        input_file: Path,
+        output_file: Path,
+        encoder: str = "h264",
+        decoder: str = "h264",
+        bitrate: str = "24M",
 ) -> None:
     """
     Transcodes an extracted video.

@@ -25,7 +25,7 @@ services:
     command:
       bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py /host/$${BAG_FILE} $${EXTRA_ARGS}"
     volumes:
-      - .:/host
+      - /:/host
     tmpfs:
       # Use this to speed up FS operations.
       - /tmp
