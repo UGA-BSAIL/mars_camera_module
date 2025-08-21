@@ -10,6 +10,6 @@ services:
         # Force the user in the container to have the same UID to avoid permission issues.
         ROS_UID: "${ROS_UID}"
     ports:
-      - "1824:22"
+      - "1825:22"
     volumes:
       - .:/home/ros/ros_libcamera
