@@ -144,22 +144,8 @@ void CameraMessenger::TranslateDetections(
   // It's normal for the "object_detect.results" tag to not be set if we don't
   // have any detections.
 
-  // Get frame size info.
-  if (lores_stream_info_.height == 0) {
-    if (camera_app_->LoresStream()) {
-      // Update stream information.
-      lores_stream_info_ =
-          camera_app_->GetStreamInfo(camera_app_->LoresStream());
-    } else {
-      // This is weird. We haven't configured the stream yet.
-      ROS_WARN_STREAM(
-          "Lores stream is not configured. Cannot translate detections.");
-      return;
-    }
-  }
-
-  const auto kFrameWidth = static_cast<float>(lores_stream_info_.width);
-  const auto kFrameHeight = static_cast<float>(lores_stream_info_.height);
+  const auto kFrameWidth = static_cast<float>(stream_info_.width);
+  const auto kFrameHeight = static_cast<float>(stream_info_.height);
   for (const auto &detection : detections) {
     Detection ros_detection;
     ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
