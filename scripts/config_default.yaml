@@ -1,7 +1,25 @@
 # ROS master URI.
-ros_master_uri: http://192.168.1.7:11311/
+ros_master_uri: http://mars-controller:11311/
 
 # Name to use for the camera node. This will govern the names of the associated topics.
 node_name: camera0
 # Name of the launch file used for running the camera.
 launch_file: "/home/bsail/camera_catkin_ws/launch/camera.launch"
+# Name of the launch file used for running the stereo camera.
+stereo_launch_file: "/home/bsail/camera_catkin_ws/launch/stereo.launch"
+
+# Hardware capabilities
+capabilities:
+  # Has an IR camera
+  ir: false
+  # Is a stereo camera
+  stereo: false
+  # Has a HAILO NPU.
+  hailo: false
+  # Supports hardware video encoding.
+  hw_video_encode: false
+
+# HAILO accelerator parameters
+hailo:
+  # Directory where compiled models are stored.
+  model_dir: "/home/bsail/models"

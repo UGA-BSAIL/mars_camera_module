@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- The name to use for the camera node. -->
+    <arg name="node_name" default="camera"/>
+    <!-- The frame ID to use for the camera. -->
+    <arg name="frame_id" default="frame"/>
+    <!-- The ffmpeg encoder name to use. -->
+    <arg name="encoder" default="h264_v4l2m2m"/>
+    <!-- The file defining the post-processing configuration to use. -->
+    <arg name="postprocess_file" default=""/>
+
+    <!-- Left camera -->
+    <include file="$(find libcamera_device)/launch/full_hd_video.launch">
+        <arg name="node_name" value="$(arg node_name)_left" />
+        <arg name="frame_id" value="$(arg frame_id)_left" />
+        <arg name="device_id" value="0"/>
+        <arg name="quality" value="4"/>
+        <arg name="encoder" value="$(arg encoder)" />
+        <arg name="fps" value="24" />
+        <arg name="postprocess_file" value="$(arg postprocess_file)" />
+    </include>
+    <!-- Right camera -->
+    <include file="$(find libcamera_device)/launch/full_hd_video.launch">
+        <arg name="node_name" value="$(arg node_name)_right" />
+        <arg name="frame_id" value="$(arg frame_id)_right" />
+        <arg name="device_id" value="1"/>
+        <arg name="quality" value="4"/>
+        <arg name="encoder" value="$(arg encoder)" />
+        <arg name="fps" value="24" />
+        <arg name="postprocess_file" value="$(arg postprocess_file)" />
+    </include>
+    <include file="$(find mars_camera_hw_manager)/launch/manager.launch">
+        <arg name="camera_id" value="$(arg node_name)" />
+    </include>
+</launch>
