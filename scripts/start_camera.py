@@ -68,8 +68,13 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
         Returns the launcher.
 
     """
-    # Start the node.
+    # Check hardware capabilities to get correct launch file.
+    is_stereo = config["capabilities"]["stereo"].get(bool)
     launch_file = config["launch_file"].as_path()
+    if is_stereo:
+        launch_file = config["stereo_launch_file"].as_path()
+
+    # Start the node.
     node_name = config["node_name"].as_str()
     frame_id = config["frame_id"].as_str()
     model_dir = config["hailo"]["model_dir"].as_path()
