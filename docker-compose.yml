@@ -9,6 +9,8 @@ services:
       args:
         # Force the user in the container to have the same UID to avoid permission issues.
         ROS_UID: "${ROS_UID}"
+        # Public key used for key-only SSH login in the builder image.
+        ROS_SSH_PUBLIC_KEY: "${ROS_SSH_PUBLIC_KEY}"
     ports:
       - "1825:22"
     volumes:

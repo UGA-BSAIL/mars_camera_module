@@ -14,21 +14,13 @@ RUN apt-get update && apt-get install -y \
 # Add ros user.
 ARG ROS_UID
 RUN useradd -m -u $ROS_UID ros
+# Disable account password while allowing SSH logins.
+RUN usermod -p '*' ros
 
 # Container for building the code.
 FROM common as builder
 
-# Set up SSH for CLion.
-RUN apt-get update && apt-get install -y ssh rsync && rm -rf /var/lib/apt/lists/*
-RUN ( \
-    echo 'LogLevel DEBUG2'; \
-    echo 'PermitRootLogin yes'; \
-    echo 'PasswordAuthentication yes'; \
-    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-  ) > /etc/ssh/sshd_config_test_clion \
-  && mkdir /run/sshd
 
-RUN yes password | passwd ros
 
 # Install libcamera.
 RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yaml python3-ply \
@@ -93,6 +85,28 @@ RUN mkdir -p /usr/include/hailo/tappas/ && \
 
 # Copy the wrapper script for cmake.
 ADD scripts/colcon_cmake.sh /usr/bin/colcon_cmake
+
+# Set up SSH for CLion.
+ARG ROS_SSH_PUBLIC_KEY
+RUN apt-get update && apt-get install -y ssh rsync && rm -rf /var/lib/apt/lists/*
+RUN test -n "$ROS_SSH_PUBLIC_KEY" \
+  && mkdir -p /run/sshd /home/ros/.ssh \
+  && printf "%s\n" "$ROS_SSH_PUBLIC_KEY" > /home/ros/.ssh/authorized_keys \
+  && chmod 700 /home/ros/.ssh \
+  && chmod 600 /home/ros/.ssh/authorized_keys \
+  && chown -R ros:ros /home/ros/.ssh \
+  && ( \
+    echo 'LogLevel DEBUG2'; \
+    echo 'PermitRootLogin no'; \
+    echo 'PasswordAuthentication no'; \
+    echo 'KbdInteractiveAuthentication no'; \
+    echo 'PubkeyAuthentication yes'; \
+    echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
+    echo 'AllowUsers ros'; \
+    echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
+  ) > /etc/ssh/sshd_config_test_clion
+
+# Password login is disabled; SSH key auth is configured via ROS_SSH_PUBLIC_KEY.
 
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
 

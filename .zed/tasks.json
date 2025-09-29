@@ -1,0 +1,8 @@
+[
+    {
+        "label": "catkin_make",
+        "command": "bash",
+        "args": ["./scripts/zed_catkin_make.sh"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    }
+]
