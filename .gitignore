@@ -1,5 +1,7 @@
 build/
 devel/
+install/
+log/
 
 # IDE files
 .idea/
@@ -8,3 +10,5 @@ devel/
 
 tappas_*_linux_installer.zip
 *.deb
+
+.catkin_workspace
