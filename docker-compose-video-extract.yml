@@ -17,13 +17,14 @@ services:
       args:
         # Force the user in the container to have the same UID to avoid permission issues.
         ROS_UID: "${ROS_UID}"
+        # Public key used for SSH login in the builder stage.
+        ROS_SSH_PUBLIC_KEY: "${ROS_SSH_PUBLIC_KEY}"
     environment:
       ROS_MASTER_URI: "http://localhost:11311"
       LD_LIBRARY_PATH: "$${LD_LIBRARY_PATH}:/usr/local/lib/"
       BAG_FILE: "${BAG_FILE}"
       EXTRA_ARGS: "${EXTRA_ARGS:-}"
-    command:
-      bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py /host/$${BAG_FILE} $${EXTRA_ARGS}"
+    command: bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py /host/$${BAG_FILE} $${EXTRA_ARGS}"
     volumes:
       - /:/host
       # Use this to speed up FS operations. We don't use a tmpfs mount because Docker
