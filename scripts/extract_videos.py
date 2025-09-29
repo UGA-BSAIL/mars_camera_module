@@ -7,6 +7,7 @@ This script handles extracting saved videos from rosbag files.
 
 from functools import partial
 from pathlib import Path
+from typing import Optional
 import signal
 import sys
 from tempfile import TemporaryDirectory
@@ -33,10 +34,13 @@ class ProcessListener(roslaunch.pmon.ProcessListener):
     def __init__(self):
         # Indicates whether all processes have exited.
         self.__all_finished = False
+        self.__exited_with_error = False
 
-    def process_died(self, name: str, _) -> None:
-        logger.debug("Process {} exited.", name)
+    def process_died(self, name: str, exit_code: Optional[int]) -> None:
+        logger.debug("Process {} exited with code {}", name, exit_code)
         self.__all_finished = True
+        if exit_code != 0:
+            self.__exited_with_error = True
 
     @property
     def all_finished(self) -> bool:
@@ -45,6 +49,8 @@ class ProcessListener(roslaunch.pmon.ProcessListener):
             True if all processes have finished.
 
         """
+        if self.__exited_with_error:
+            raise OSError("Monitored process exited with an error.")
         return self.__all_finished
 
 
@@ -93,12 +99,12 @@ def _split_bag(*, bag_file: Path, output_dir: Path) -> None:
 
 
 def _transcode_video(
-        *,
-        input_file: Path,
-        output_file: Path,
-        encoder: str = "h264",
-        decoder: str = "h264",
-        bitrate: str = "24M",
+    *,
+    input_file: Path,
+    output_file: Path,
+    encoder: str = "h264",
+    decoder: str = "h264",
+    bitrate: str = "24M",
 ) -> None:
     """
     Transcodes an extracted video.
@@ -115,7 +121,10 @@ def _transcode_video(
     ffmpeg = (
         FFmpeg()
         .input(input_file.as_posix(), {"c:v": decoder, "framerate": 24})
-        .output(output_file.as_posix(), {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"})
+        .output(
+            output_file.as_posix(),
+            {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"},
+        )
     )
 
     @ffmpeg.on("stderr")
@@ -235,7 +244,7 @@ def _make_parser() -> argparse.ArgumentParser:
         "--extra-topics",
         nargs="+",
         default=["/gps1/fix", "/gps2/fix"],
-        help="Additional topics to extract CSV data for."
+        help="Additional topics to extract CSV data for.",
     )
 
     return parser
@@ -256,9 +265,7 @@ def main() -> None:
     if cli_args.extra_topics:
         # Extract extra topics.
         _extract_topics(
-            cli_args.bag_file,
-            topics=cli_args.extra_topics,
-            output_base=cli_args.output
+            cli_args.bag_file, topics=cli_args.extra_topics, output_base=cli_args.output
         )
 
 

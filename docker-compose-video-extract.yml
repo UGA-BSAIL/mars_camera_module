@@ -26,6 +26,6 @@ services:
       bash -c "cd /home/ros/ros_libcamera && source devel/setup.bash && python3 extract_videos.py /host/$${BAG_FILE} $${EXTRA_ARGS}"
     volumes:
       - /:/host
-    tmpfs:
-      # Use this to speed up FS operations.
-      - /tmp
+      # Use this to speed up FS operations. We don't use a tmpfs mount because Docker
+      # backs those with RAM, and we might need to write a LOT of data.
+      - /tmp:/tmp
