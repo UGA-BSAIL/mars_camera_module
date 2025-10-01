@@ -124,22 +124,7 @@ void ReconfigureParams(CameraMessenger *messenger,
 
   // Set focus lock.
   messenger->SetFocusLocked(dynamic_config.lock_focus);
-
-  // Camera needs to be restarted for these to take effect.
-  if (level & 0x1) {
-    // Some parameters were changed which require a full reset.
-    messenger->Stop();
-    messenger->ConfigureOptions(camera_options);
-  }
-
-  try {
-      messenger->Start();
-  } catch (const std::runtime_error &e) {
-      ROS_FATAL_STREAM("Failed to start camera: " << e.what());
-      // There's no easy way to recover from this. The best policy is to exit
-      // and let systemd restart.
-      exit(1);
-  }
+  messenger->ConfigureOptions(camera_options);
 }
 
 /**
@@ -187,7 +172,8 @@ int main(int argc, char **argv) {
   node.param<std::string>("frame_id", frame_id, "frame");
   node.param<int32_t>("device_id", device_id, 0);
 
-  ROS_INFO_STREAM("Starting camera node for device " << device_id << " and frame " << frame_id << "...");
+  ROS_INFO_STREAM("Starting camera node for device "
+                  << device_id << " and frame " << frame_id << "...");
 
   // Create a publisher for images.
   ImageTransport image_transport(node);
@@ -221,6 +207,7 @@ int main(int argc, char **argv) {
   param_server.setCallback(reconfigure_callback);
 
   // Process all camera messages.
+  camera.Start();
   ros::Rate rate(5);
   // Wait for the camera to initialize.
   while (!camera.WaitForFrame()) {

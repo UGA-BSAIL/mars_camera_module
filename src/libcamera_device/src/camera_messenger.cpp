@@ -34,7 +34,7 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
 
 // Timeout to use when waiting for a frame before we consider the camera
 // stalled.
-const std::chrono::seconds kCameraTimeout(1000);
+const std::chrono::seconds kCameraTimeout(10);
 
 /**
  * @brief Converts a kernel timestamp to ROS time.
@@ -249,7 +249,7 @@ bool CameraMessenger::WaitForFrame() {
         "Timed out while waiting for a frame. This is either a hardware issue, "
         "or a bug in libcamera.");
     // It's not clear whether this is recoverable. Probably the best thing to do
-    // is bail out and hove systemd restart the whole node.
+    // is bail out and have systemd restart the whole node.
     abort();
   } else if (message.type == RPiCamEncoder::MsgType::Quit) {
     ROS_INFO_STREAM("Got LibCamera quit request.");
@@ -302,6 +302,9 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->afWindow_height = new_options.afWindow_height;
   options->post_process_libs = new_options.post_process_libs;
   options->post_process_file = new_options.post_process_file;
+
+  // Apply the new configuration.
+  camera_app_->ReConfigureFromOptions();
 }
 
 void CameraMessenger::SetFocusLocked(bool locked) {

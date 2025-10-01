@@ -32,6 +32,7 @@
 #include "buffer_sync.hpp"
 #include "completed_request.hpp"
 #include "dma_heaps.hpp"
+#include "options.hpp"
 #include "post_processor.hpp"
 #include "stream_info.hpp"
 
@@ -180,6 +181,11 @@ public:
 	void ShowPreview(CompletedRequestPtr &completed_request, Stream *stream);
 
 	void SetControls(const ControlList &controls);
+        /**
+         * @brief Re-configures the camera on the fly based on the current
+         *   options. There is no need to stop/start it.
+         */
+        void ReConfigureFromOptions();
 	StreamInfo GetStreamInfo(Stream const *stream) const;
 	const ControlList &GetProperties() const
 	{
