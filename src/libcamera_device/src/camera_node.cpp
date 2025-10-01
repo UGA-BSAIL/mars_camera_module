@@ -46,7 +46,7 @@ struct StaticConfig {
  * @param publisher Will be used for publishing images.
  * @param image The image to publish.
  */
-void PublishEncoded(ImagePublisher *publisher, const Image &image) {
+void PublishEncoded(ImagePublisher* publisher, const Image& image) {
   publisher->publish(image);
 }
 
@@ -55,8 +55,8 @@ void PublishEncoded(ImagePublisher *publisher, const Image &image) {
  * @param publisher Will be used for publishing detections.
  * @param motion The detections to publish.
  */
-void PublishDetections(ros::Publisher *publisher,
-                       const libcamera_device::FrameDetections &motion) {
+void PublishDetections(ros::Publisher* publisher,
+                       const libcamera_device::FrameDetections& motion) {
   publisher->publish(motion);
 }
 
@@ -65,8 +65,8 @@ void PublishDetections(ros::Publisher *publisher,
  * @param publisher Will be used for publishing detections.
  * @param motion The detections to publish.
  */
-void PublishMotion(ros::Publisher *publisher,
-                   const libcamera_device::FrameMotion &motion) {
+void PublishMotion(ros::Publisher* publisher,
+                   const libcamera_device::FrameMotion& motion) {
   publisher->publish(motion);
 }
 
@@ -78,8 +78,8 @@ void PublishMotion(ros::Publisher *publisher,
  * @param out_config [out] The camera configuration.
  */
 void ParamToVideoConfig(const StaticConfig static_config,
-                        const LibcameraDeviceConfig &dynamic_config,
-                        VideoOptions *out_config) {
+                        const LibcameraDeviceConfig& dynamic_config,
+                        VideoOptions* out_config) {
   out_config->framerate = static_cast<float>(dynamic_config.fps);
   out_config->mode =
       Mode(dynamic_config.width, dynamic_config.height, 24, false);
@@ -121,9 +121,9 @@ void ParamToVideoConfig(const StaticConfig static_config,
  * @param dynamic_config The configuration that was changed.
  * @param level The configuration level bitmask.
  */
-void ReconfigureParams(CameraMessenger *messenger,
-                       const StaticConfig &static_config,
-                       const LibcameraDeviceConfig &dynamic_config,
+void ReconfigureParams(CameraMessenger* messenger,
+                       const StaticConfig& static_config,
+                       const LibcameraDeviceConfig& dynamic_config,
                        uint32_t level) {
   ROS_INFO_STREAM("Reconfigure request: " << dynamic_config.width << "x"
                                           << dynamic_config.height << ", "
@@ -135,22 +135,8 @@ void ReconfigureParams(CameraMessenger *messenger,
 
   // Set focus lock.
   messenger->SetFocusLocked(dynamic_config.lock_focus);
-
-  // Camera needs to be restarted for these to take effect.
-  if (level & 0x1) {
-    // Some parameters were changed which require a full reset.
-    messenger->Stop();
-    messenger->ConfigureOptions(camera_options);
-  }
-
-  try {
-    messenger->Start();
-  } catch (const std::runtime_error &e) {
-    ROS_FATAL_STREAM("Failed to start camera: " << e.what());
-    // There's no easy way to recover from this. The best policy is to exit
-    // and let systemd restart.
-    exit(1);
-  }
+  (void)level;
+  messenger->ConfigureOptions(camera_options);
 }
 
 /**
@@ -161,10 +147,10 @@ void ReconfigureParams(CameraMessenger *messenger,
  * @param node The node handle.
  * @param camera The camera itself.
  */
-void WaitForSubscriber(ImagePublisher &image_publisher,
-                       ros::Publisher &detection_publisher,
-                       ros::Publisher &motion_publisher,
-                       const ros::NodeHandle &node, CameraMessenger *camera) {
+void WaitForSubscriber(ImagePublisher& image_publisher,
+                       ros::Publisher& detection_publisher,
+                       ros::Publisher& motion_publisher,
+                       const ros::NodeHandle& node, CameraMessenger* camera) {
   if (image_publisher.getNumSubscribers() > 0 ||
       detection_publisher.getNumSubscribers() > 0 ||
       motion_publisher.getNumSubscribers() > 0) {
@@ -191,7 +177,7 @@ void WaitForSubscriber(ImagePublisher &image_publisher,
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ros::init(argc, argv, "camera", ros::init_options::AnonymousName);
   ros::NodeHandle node("~");
 
@@ -241,6 +227,7 @@ int main(int argc, char **argv) {
   param_server.setCallback(reconfigure_callback);
 
   // Process all camera messages.
+  camera.Start();
   ros::Rate rate(5);
   // Wait for the camera to initialize.
   while (!camera.WaitForFrame()) {

@@ -274,6 +274,156 @@ Mode RPiCamApp::selectMode(const Mode &mode) const
 
 	return { best_mode.size.width, best_mode.size.height, best_mode.depth(), mode.packed };
 }
+void RPiCamApp::ReConfigureFromOptions() {
+        if (!camera_) {
+          // Camera isn't opened yet. We can't do anything.
+          return;
+        }
+
+        std::lock_guard<std::mutex> lock(control_mutex_);
+
+        // Build a list of controls based on the currently-set options.
+	// We don't overwrite anything the application may have set before calling us.
+	if (!controls_.get(controls::ScalerCrop) && !controls_.get(controls::rpi::ScalerCrops))
+	{
+		const Rectangle sensor_area = camera_->controls().at(&controls::ScalerCrop).max().get<Rectangle>();
+		const Rectangle default_crop = camera_->controls().at(&controls::ScalerCrop).def().get<Rectangle>();
+		std::vector<Rectangle> crops;
+
+		if (options_->roi_width != 0 && options_->roi_height != 0)
+		{
+			int x = options_->roi_x * sensor_area.width;
+			int y = options_->roi_y * sensor_area.height;
+			unsigned int w = options_->roi_width * sensor_area.width;
+			unsigned int h = options_->roi_height * sensor_area.height;
+			crops.push_back({ x, y, w, h });
+			crops.back().translateBy(sensor_area.topLeft());
+		}
+		else
+		{
+			crops.push_back(default_crop);
+		}
+
+		LOG(2, "Using crop (main) " << crops.back().toString());
+
+		if (options_->lores_width != 0 && options_->lores_height != 0 && !options_->lores_par)
+		{
+			crops.push_back(crops.back());
+			LOG(2, "Using crop (lores) " << crops.back().toString());
+		}
+
+		controls_.set(controls::rpi::ScalerCrops, libcamera::Span<const Rectangle>(crops.data(), crops.size()));
+	}
+
+	if (!controls_.get(controls::AfWindows) && !controls_.get(controls::AfMetering) && options_->afWindow_width != 0 &&
+		options_->afWindow_height != 0)
+	{
+		Rectangle sensor_area = camera_->controls().at(&controls::ScalerCrop).max().get<Rectangle>();
+		int x = options_->afWindow_x * sensor_area.width;
+		int y = options_->afWindow_y * sensor_area.height;
+		int w = options_->afWindow_width * sensor_area.width;
+		int h = options_->afWindow_height * sensor_area.height;
+		Rectangle afwindows_rectangle[1];
+		afwindows_rectangle[0] = Rectangle(x, y, w, h);
+		afwindows_rectangle[0].translateBy(sensor_area.topLeft());
+		LOG(2, "Using AfWindow " << afwindows_rectangle[0].toString());
+		//activate the AfMeteringWindows
+		controls_.set(controls::AfMetering, controls::AfMeteringWindows);
+		//set window
+		controls_.set(controls::AfWindows, afwindows_rectangle);
+	}
+
+	// Framerate is a bit weird. If it was set programmatically, we go with that, but
+	// otherwise it applies only to preview/video modes. For stills capture we set it
+	// as long as possible so that we get whatever the exposure profile wants.
+	if (!controls_.get(controls::FrameDurationLimits))
+	{
+		if (StillStream())
+			controls_.set(controls::FrameDurationLimits,
+						  libcamera::Span<const int64_t, 2>({ INT64_C(100), INT64_C(1000000000) }));
+		else if (!options_->framerate || options_->framerate.value() > 0)
+		{
+			int64_t frame_time = 1000000 / options_->framerate.value_or(DEFAULT_FRAMERATE); // in us
+			controls_.set(controls::FrameDurationLimits,
+						  libcamera::Span<const int64_t, 2>({ frame_time, frame_time }));
+		}
+	}
+
+	if (!controls_.get(controls::ExposureTime) && options_->shutter)
+		controls_.set(controls::ExposureTime, options_->shutter.get<std::chrono::microseconds>());
+	if (!controls_.get(controls::AnalogueGain) && options_->gain)
+		controls_.set(controls::AnalogueGain, options_->gain);
+	if (!controls_.get(controls::AeMeteringMode))
+		controls_.set(controls::AeMeteringMode, options_->metering_index);
+	if (!controls_.get(controls::AeExposureMode))
+		controls_.set(controls::AeExposureMode, options_->exposure_index);
+	if (!controls_.get(controls::ExposureValue))
+		controls_.set(controls::ExposureValue, options_->ev);
+	if (!controls_.get(controls::AwbMode))
+		controls_.set(controls::AwbMode, options_->awb_index);
+	if (!controls_.get(controls::ColourGains) && options_->awb_gain_r && options_->awb_gain_b)
+		controls_.set(controls::ColourGains,
+					  libcamera::Span<const float, 2>({ options_->awb_gain_r, options_->awb_gain_b }));
+	if (!controls_.get(controls::Brightness))
+		controls_.set(controls::Brightness, options_->brightness);
+	if (!controls_.get(controls::Contrast))
+		controls_.set(controls::Contrast, options_->contrast);
+	if (!controls_.get(controls::Saturation))
+		controls_.set(controls::Saturation, options_->saturation);
+	if (!controls_.get(controls::Sharpness))
+		controls_.set(controls::Sharpness, options_->sharpness);
+	if (!controls_.get(controls::HdrMode) &&
+	    (options_->hdr == "auto" || options_->hdr == "single-exp"))
+		controls_.set(controls::HdrMode, controls::HdrModeSingleExposure);
+
+	// AF Controls, where supported and not already set
+	if (!controls_.get(controls::AfMode) && camera_->controls().count(&controls::AfMode) > 0)
+	{
+		int afm = options_->afMode_index;
+		if (afm == -1)
+		{
+			// Choose a default AF mode based on other options
+			if (options_->lens_position || options_->set_default_lens_position || options_->af_on_capture)
+				afm = controls::AfModeManual;
+			else
+				afm = camera_->controls().at(&controls::AfMode).max().get<int>();
+		}
+		controls_.set(controls::AfMode, afm);
+	}
+	if (!controls_.get(controls::AfRange) && camera_->controls().count(&controls::AfRange) > 0)
+		controls_.set(controls::AfRange, options_->afRange_index);
+	if (!controls_.get(controls::AfSpeed) && camera_->controls().count(&controls::AfSpeed) > 0)
+		controls_.set(controls::AfSpeed, options_->afSpeed_index);
+
+	if (controls_.get(controls::AfMode).value_or(controls::AfModeManual) == controls::AfModeAuto)
+	{
+		// When starting a viewfinder or video stream in AF "auto" mode,
+		// trigger a scan now (but don't move the lens when capturing a still).
+		// If an application requires more control over AF triggering, it may
+		// override this behaviour with prior settings of AfMode or AfTrigger.
+		if (!StillStream() && !controls_.get(controls::AfTrigger))
+			controls_.set(controls::AfTrigger, controls::AfTriggerStart);
+	}
+	else if ((options_->lens_position || options_->set_default_lens_position) &&
+			 camera_->controls().count(&controls::LensPosition) > 0 && !controls_.get(controls::LensPosition))
+	{
+		float f;
+		if (options_->lens_position)
+			f = options_->lens_position.value();
+		else
+			f = camera_->controls().at(&controls::LensPosition).def().get<float>();
+		LOG(2, "Setting LensPosition: " << f);
+		controls_.set(controls::LensPosition, f);
+	}
+
+	if (options_->flicker_period && !controls_.get(controls::AeFlickerMode) &&
+		camera_->controls().find(&controls::AeFlickerMode) != camera_->controls().end() &&
+		camera_->controls().find(&controls::AeFlickerPeriod) != camera_->controls().end())
+	{
+		controls_.set(controls::AeFlickerMode, controls::FlickerManual);
+		controls_.set(controls::AeFlickerPeriod, options_->flicker_period.get<std::chrono::microseconds>());
+	}
+}
 
 void RPiCamApp::ConfigureViewfinder()
 {
@@ -633,147 +783,7 @@ void RPiCamApp::StartCamera()
 	// This makes all the Request objects that we shall need.
 	makeRequests();
 
-	// Build a list of initial controls that we must set in the camera before starting it.
-	// We don't overwrite anything the application may have set before calling us.
-	if (!controls_.get(controls::ScalerCrop) && !controls_.get(controls::rpi::ScalerCrops))
-	{
-		const Rectangle sensor_area = camera_->controls().at(&controls::ScalerCrop).max().get<Rectangle>();
-		const Rectangle default_crop = camera_->controls().at(&controls::ScalerCrop).def().get<Rectangle>();
-		std::vector<Rectangle> crops;
-
-		if (options_->roi_width != 0 && options_->roi_height != 0)
-		{
-			int x = options_->roi_x * sensor_area.width;
-			int y = options_->roi_y * sensor_area.height;
-			unsigned int w = options_->roi_width * sensor_area.width;
-			unsigned int h = options_->roi_height * sensor_area.height;
-			crops.push_back({ x, y, w, h });
-			crops.back().translateBy(sensor_area.topLeft());
-		}
-		else
-		{
-			crops.push_back(default_crop);
-		}
-
-		LOG(2, "Using crop (main) " << crops.back().toString());
-
-		if (options_->lores_width != 0 && options_->lores_height != 0 && !options_->lores_par)
-		{
-			crops.push_back(crops.back());
-			LOG(2, "Using crop (lores) " << crops.back().toString());
-		}
-
-		controls_.set(controls::rpi::ScalerCrops, libcamera::Span<const Rectangle>(crops.data(), crops.size()));
-	}
-
-	if (!controls_.get(controls::AfWindows) && !controls_.get(controls::AfMetering) && options_->afWindow_width != 0 &&
-		options_->afWindow_height != 0)
-	{
-		Rectangle sensor_area = camera_->controls().at(&controls::ScalerCrop).max().get<Rectangle>();
-		int x = options_->afWindow_x * sensor_area.width;
-		int y = options_->afWindow_y * sensor_area.height;
-		int w = options_->afWindow_width * sensor_area.width;
-		int h = options_->afWindow_height * sensor_area.height;
-		Rectangle afwindows_rectangle[1];
-		afwindows_rectangle[0] = Rectangle(x, y, w, h);
-		afwindows_rectangle[0].translateBy(sensor_area.topLeft());
-		LOG(2, "Using AfWindow " << afwindows_rectangle[0].toString());
-		//activate the AfMeteringWindows
-		controls_.set(controls::AfMetering, controls::AfMeteringWindows);
-		//set window
-		controls_.set(controls::AfWindows, afwindows_rectangle);
-	}
-
-	// Framerate is a bit weird. If it was set programmatically, we go with that, but
-	// otherwise it applies only to preview/video modes. For stills capture we set it
-	// as long as possible so that we get whatever the exposure profile wants.
-	if (!controls_.get(controls::FrameDurationLimits))
-	{
-		if (StillStream())
-			controls_.set(controls::FrameDurationLimits,
-						  libcamera::Span<const int64_t, 2>({ INT64_C(100), INT64_C(1000000000) }));
-		else if (!options_->framerate || options_->framerate.value() > 0)
-		{
-			int64_t frame_time = 1000000 / options_->framerate.value_or(DEFAULT_FRAMERATE); // in us
-			controls_.set(controls::FrameDurationLimits,
-						  libcamera::Span<const int64_t, 2>({ frame_time, frame_time }));
-		}
-	}
-
-	if (!controls_.get(controls::ExposureTime) && options_->shutter)
-		controls_.set(controls::ExposureTime, options_->shutter.get<std::chrono::microseconds>());
-	if (!controls_.get(controls::AnalogueGain) && options_->gain)
-		controls_.set(controls::AnalogueGain, options_->gain);
-	if (!controls_.get(controls::AeMeteringMode))
-		controls_.set(controls::AeMeteringMode, options_->metering_index);
-	if (!controls_.get(controls::AeExposureMode))
-		controls_.set(controls::AeExposureMode, options_->exposure_index);
-	if (!controls_.get(controls::ExposureValue))
-		controls_.set(controls::ExposureValue, options_->ev);
-	if (!controls_.get(controls::AwbMode))
-		controls_.set(controls::AwbMode, options_->awb_index);
-	if (!controls_.get(controls::ColourGains) && options_->awb_gain_r && options_->awb_gain_b)
-		controls_.set(controls::ColourGains,
-					  libcamera::Span<const float, 2>({ options_->awb_gain_r, options_->awb_gain_b }));
-	if (!controls_.get(controls::Brightness))
-		controls_.set(controls::Brightness, options_->brightness);
-	if (!controls_.get(controls::Contrast))
-		controls_.set(controls::Contrast, options_->contrast);
-	if (!controls_.get(controls::Saturation))
-		controls_.set(controls::Saturation, options_->saturation);
-	if (!controls_.get(controls::Sharpness))
-		controls_.set(controls::Sharpness, options_->sharpness);
-	if (!controls_.get(controls::HdrMode) &&
-	    (options_->hdr == "auto" || options_->hdr == "single-exp"))
-		controls_.set(controls::HdrMode, controls::HdrModeSingleExposure);
-
-	// AF Controls, where supported and not already set
-	if (!controls_.get(controls::AfMode) && camera_->controls().count(&controls::AfMode) > 0)
-	{
-		int afm = options_->afMode_index;
-		if (afm == -1)
-		{
-			// Choose a default AF mode based on other options
-			if (options_->lens_position || options_->set_default_lens_position || options_->af_on_capture)
-				afm = controls::AfModeManual;
-			else
-				afm = camera_->controls().at(&controls::AfMode).max().get<int>();
-		}
-		controls_.set(controls::AfMode, afm);
-	}
-	if (!controls_.get(controls::AfRange) && camera_->controls().count(&controls::AfRange) > 0)
-		controls_.set(controls::AfRange, options_->afRange_index);
-	if (!controls_.get(controls::AfSpeed) && camera_->controls().count(&controls::AfSpeed) > 0)
-		controls_.set(controls::AfSpeed, options_->afSpeed_index);
-
-	if (controls_.get(controls::AfMode).value_or(controls::AfModeManual) == controls::AfModeAuto)
-	{
-		// When starting a viewfinder or video stream in AF "auto" mode,
-		// trigger a scan now (but don't move the lens when capturing a still).
-		// If an application requires more control over AF triggering, it may
-		// override this behaviour with prior settings of AfMode or AfTrigger.
-		if (!StillStream() && !controls_.get(controls::AfTrigger))
-			controls_.set(controls::AfTrigger, controls::AfTriggerStart);
-	}
-	else if ((options_->lens_position || options_->set_default_lens_position) &&
-			 camera_->controls().count(&controls::LensPosition) > 0 && !controls_.get(controls::LensPosition))
-	{
-		float f;
-		if (options_->lens_position)
-			f = options_->lens_position.value();
-		else
-			f = camera_->controls().at(&controls::LensPosition).def().get<float>();
-		LOG(2, "Setting LensPosition: " << f);
-		controls_.set(controls::LensPosition, f);
-	}
-
-	if (options_->flicker_period && !controls_.get(controls::AeFlickerMode) &&
-		camera_->controls().find(&controls::AeFlickerMode) != camera_->controls().end() &&
-		camera_->controls().find(&controls::AeFlickerPeriod) != camera_->controls().end())
-	{
-		controls_.set(controls::AeFlickerMode, controls::FlickerManual);
-		controls_.set(controls::AeFlickerPeriod, options_->flicker_period.get<std::chrono::microseconds>());
-	}
+        ReConfigureFromOptions();
 
 	if (camera_->start(&controls_))
 		throw std::runtime_error("failed to start camera");
@@ -1219,6 +1229,8 @@ void RPiCamApp::configureDenoise(const std::string &denoise_mode)
 }
 
 void RPiCamApp::SetFocusLocked(bool locked) {
+  std::lock_guard<std::mutex> lock(control_mutex_);
+
   if (locked) {
     controls_.set(controls::AfPause, controls::AfPauseEnum::AfPauseImmediate);
   } else {
