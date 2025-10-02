@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Launch file for synchronizing two cameras. -->
+
+<launch>
+    <!-- IDs of the primary and secondary cameras. -->
+    <arg name="primary_camera_id"/>
+    <arg name="secondary_camera_id"/>
+
+    <node name="$(anon camera_sync)" pkg="mars_camera_hw_manager" type="camera_sync" output="screen">
+        <remap to="/$(arg primary_camera_id)/frame_headers" from="~primary/frame_headers"/>
+        <param name="secondary_node_name" value="$(arg secondary_camera_id)"/>
+        <param name="kp" value="0.04"/>
+    </node>
+</launch>

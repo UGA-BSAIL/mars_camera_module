@@ -193,9 +193,11 @@ include_directories(
 # )
 
 catkin_install_python(PROGRAMS
+        nodes/camera_sync
         nodes/hw_manager
         nodes/fan_controller
         nodes/hw_info
+        nodes/shutdown
         DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

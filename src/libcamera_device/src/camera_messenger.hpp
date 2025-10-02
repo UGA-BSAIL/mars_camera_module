@@ -85,7 +85,13 @@ class CameraMessenger {
    * @brief Sets whether auto-focus is locked
    * @param locked True iff auto-focus should be locked.
    */
-  void SetFocusLocked(bool locked);
+  void SetFocusLocked(bool locked) const;
+
+  /**
+   * @brief Sets the offset for the calculated frame duration.
+   * @param offset The offset to set in us.
+   */
+  void SetFrameDurationOffset(int32_t offset) const;
 
  private:
   /// True iff camera is currently running.
