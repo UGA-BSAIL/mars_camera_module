@@ -8,6 +8,7 @@
 #include <libcamera_device/LibcameraDeviceConfig.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <std_msgs/Header.h>
 
 #include <cstdlib>
 #include <functional>
@@ -27,34 +28,27 @@ using ImagePublisher = image_transport::Publisher;
 
 namespace {
 
-// Unfortunately, Boost has its own placeholders that conflict with the std
-// ones, so we have to rename them.
 const auto kStd1 = std::placeholders::_1;
 const auto kStd2 = std::placeholders::_2;
 
-/**
- * @struct Represents static configuration, which is set once at startup.
- */
 struct StaticConfig {
-  /// The numeric identifier of the camera to read from.
   int32_t device_id;
 };
 
 /**
- * Publishes a camera message. This is meant to be used as a callback.
- * @param publisher Will be used for publishing images.
- * @param image The image to publish.
+ * @brief Publishes the encoded image.
+ * @param image_publisher The publisher for the image.
+ * @param header_publisher A separate publisher for just the image header.
+ * @param image The image message to publish.
  */
-void PublishEncoded(ImagePublisher *publisher, const Image &image) {
-  publisher->publish(image);
+void PublishEncoded(const ImagePublisher *image_publisher,
+                    const ros::Publisher *header_publisher,
+                    const Image &image) {
+  image_publisher->publish(image);
+  header_publisher->publish(image.header);
 }
 
-/**
- * Publishes camera detections. This is meant to be used as a callback.
- * @param publisher Will be used for publishing detections.
- * @param detections The detections to publish.
- */
-void PublishDetections(ros::Publisher *publisher,
+void PublishDetections(const ros::Publisher *publisher,
                        const libcamera_device::FrameDetections &detections) {
   publisher->publish(detections);
 }
@@ -114,17 +108,25 @@ void ReconfigureParams(CameraMessenger *messenger,
                        const StaticConfig &static_config,
                        const LibcameraDeviceConfig &dynamic_config,
                        uint32_t level) {
-  ROS_INFO_STREAM("Reconfigure request: " << dynamic_config.width << "x"
-                                          << dynamic_config.height << ", "
-                                          << dynamic_config.fps << " FPS.");
-
   // Set the new parameters.
   VideoOptions camera_options;
   ParamToVideoConfig(static_config, dynamic_config, &camera_options);
 
-  // Set focus lock.
-  messenger->SetFocusLocked(dynamic_config.lock_focus);
-  messenger->ConfigureOptions(camera_options);
+  if (level & 0x1) {
+    // Set standard options.
+    ROS_INFO_STREAM("Reconfigure request: " << dynamic_config.width << "x"
+                                            << dynamic_config.height << ", "
+                                            << dynamic_config.fps << " FPS.");
+    messenger->ConfigureOptions(camera_options);
+  }
+  if (level & 0x2) {
+    // Set frame duration offset.
+    messenger->SetFrameDurationOffset(dynamic_config.frame_duration_offset);
+  }
+  if (level & 0x4) {
+    // Set focus lock.
+    messenger->SetFocusLocked(dynamic_config.lock_focus);
+  }
 }
 
 /**
@@ -135,8 +137,8 @@ void ReconfigureParams(CameraMessenger *messenger,
  * @param node The node handle.
  * @param camera The camera itself.
  */
-void WaitForSubscriber(ImagePublisher &image_publisher,
-                       ros::Publisher &detection_publisher,
+void WaitForSubscriber(const ImagePublisher &image_publisher,
+                       const ros::Publisher &detection_publisher,
                        const ros::NodeHandle &node, CameraMessenger *camera) {
   if (image_publisher.getNumSubscribers() > 0 ||
       detection_publisher.getNumSubscribers() > 0) {
@@ -182,6 +184,9 @@ int main(int argc, char **argv) {
   // Create a publisher for detections.
   auto detection_publisher =
       node.advertise<libcamera_device::FrameDetections>("detections", 10);
+  // Create a publisher for just the frame headers.
+  ros::Publisher header_publisher =
+      node.advertise<std_msgs::Header>("frame_headers", 10);
 
   Server<LibcameraDeviceConfig> param_server;
 
@@ -197,7 +202,7 @@ int main(int argc, char **argv) {
   CameraMessenger camera(std::make_unique<RPiCamEncoder>(), frame_id,
                          default_video_options);
   camera.SetMessageReadyCallback(
-      std::bind(PublishEncoded, &image_publisher, kStd1));
+      std::bind(PublishEncoded, &image_publisher, &header_publisher, kStd1));
   camera.SetDetectionsReadyCallback(
       std::bind(PublishDetections, &detection_publisher, kStd1));
 

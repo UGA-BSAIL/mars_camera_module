@@ -27,5 +27,6 @@
         <param name="device_id" value="$(arg device_id)"/>
         <param name="postprocess_file" value="$(arg postprocess_file)"/>
     	<remap from="detections" to="/$(arg node_name)/detections"/>
+    	<remap from="frame_headers" to="/$(arg node_name)/frame_headers"/>
     </node>
 </launch>

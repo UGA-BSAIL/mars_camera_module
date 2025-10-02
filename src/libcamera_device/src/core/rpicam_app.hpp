@@ -150,6 +150,11 @@ public:
          *  If true, the focus will be locked. If false, the focus will be unlocked.
          */
         void SetFocusLocked(bool locked);
+        /**
+         * @brief Sets the frame duration offset to use, in us.
+         * @param offset The offset in us.
+         */
+        void SetFrameDurationOffset(int32_t offset);
 
 	void Teardown();
 	void StartCamera();
@@ -289,6 +294,12 @@ private:
 	void previewThread();
 	void configureDenoise(const std::string &denoise_mode);
 	Mode selectMode(const Mode &mode) const;
+        /**
+         * @brief Configures the frame rate controls.
+         * @param duration_offset The offset (in us) to apply to the computed
+         *  frame duration.
+         */
+        void configureFrameRate(int32_t duration_offset);
 
 	std::unique_ptr<CameraManager> camera_manager_;
 	std::shared_ptr<Camera> camera_;

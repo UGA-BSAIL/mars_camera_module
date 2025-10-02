@@ -32,4 +32,9 @@
     <include file="$(find mars_camera_hw_manager)/launch/manager.launch">
         <arg name="camera_id" value="$(arg node_name)" />
     </include>
+    <!-- Synchronize cameras -->
+    <include file="$(find mars_camera_hw_manager)/launch/camera_sync.launch">
+        <arg name="primary_camera_id" value="$(arg node_name)_left" />
+        <arg name="secondary_camera_id" value="$(arg node_name)_right" />
+    </include>
 </launch>

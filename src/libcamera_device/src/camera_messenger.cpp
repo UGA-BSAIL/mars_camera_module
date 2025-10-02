@@ -307,9 +307,14 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   camera_app_->ReConfigureFromOptions();
 }
 
-void CameraMessenger::SetFocusLocked(bool locked) {
+void CameraMessenger::SetFocusLocked(bool locked) const {
   ROS_INFO_STREAM("Setting focus lock to " << locked);
   camera_app_->SetFocusLocked(locked);
+}
+
+void CameraMessenger::SetFrameDurationOffset(int32_t offset) const {
+  ROS_DEBUG_STREAM("Setting frame duration offset to " << offset);
+  camera_app_->SetFrameDurationOffset(offset);
 }
 
 }  // namespace libcamera_device

@@ -274,6 +274,26 @@ Mode RPiCamApp::selectMode(const Mode &mode) const
 
 	return { best_mode.size.width, best_mode.size.height, best_mode.depth(), mode.packed };
 }
+
+void RPiCamApp::configureFrameRate(int32_t duration_offset) {
+  // Framerate is a bit weird. If it was set programmatically, we go with that, but
+  // otherwise it applies only to preview/video modes. For stills capture we set it
+  // as long as possible so that we get whatever the exposure profile wants.
+  if (!controls_.get(controls::FrameDurationLimits))
+  {
+    if (StillStream())
+      controls_.set(controls::FrameDurationLimits,
+                                libcamera::Span<const int64_t, 2>({ INT64_C(100), INT64_C(1000000000) }));
+    else if (!options_->framerate || options_->framerate.value() > 0)
+    {
+      int64_t frame_time = 1000000 / options_->framerate.value_or(DEFAULT_FRAMERATE); // in us
+      frame_time += duration_offset;
+      controls_.set(controls::FrameDurationLimits,
+                                libcamera::Span<const int64_t, 2>({ frame_time, frame_time }));
+    }
+  }
+}
+
 void RPiCamApp::ReConfigureFromOptions() {
         if (!camera_) {
           // Camera isn't opened yet. We can't do anything.
@@ -333,21 +353,8 @@ void RPiCamApp::ReConfigureFromOptions() {
 		controls_.set(controls::AfWindows, afwindows_rectangle);
 	}
 
-	// Framerate is a bit weird. If it was set programmatically, we go with that, but
-	// otherwise it applies only to preview/video modes. For stills capture we set it
-	// as long as possible so that we get whatever the exposure profile wants.
-	if (!controls_.get(controls::FrameDurationLimits))
-	{
-		if (StillStream())
-			controls_.set(controls::FrameDurationLimits,
-						  libcamera::Span<const int64_t, 2>({ INT64_C(100), INT64_C(1000000000) }));
-		else if (!options_->framerate || options_->framerate.value() > 0)
-		{
-			int64_t frame_time = 1000000 / options_->framerate.value_or(DEFAULT_FRAMERATE); // in us
-			controls_.set(controls::FrameDurationLimits,
-						  libcamera::Span<const int64_t, 2>({ frame_time, frame_time }));
-		}
-	}
+        // When we set a new frame rate, zero out the offset.
+        configureFrameRate(0);
 
 	if (!controls_.get(controls::ExposureTime) && options_->shutter)
 		controls_.set(controls::ExposureTime, options_->shutter.get<std::chrono::microseconds>());
@@ -1236,4 +1243,10 @@ void RPiCamApp::SetFocusLocked(bool locked) {
   } else {
     controls_.set(controls::AfPause, controls::AfPauseEnum::AfPauseResume);
   }
+}
+
+void RPiCamApp::SetFrameDurationOffset(int32_t offset) {
+  std::lock_guard<std::mutex> lock(control_mutex_);
+
+  configureFrameRate(offset);
 }
