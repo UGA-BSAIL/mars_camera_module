@@ -1,7 +1,6 @@
 Header header
 
-# The TF frame ID that will be used for all images from this camera.
-string frame_id
-
 # Whether this camera supports IR.
 bool supports_ir
+# Whether this is a stereo camera.
+bool supports_stereo

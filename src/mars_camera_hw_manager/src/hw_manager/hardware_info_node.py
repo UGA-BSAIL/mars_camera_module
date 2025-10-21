@@ -27,8 +27,13 @@ def _make_info_message() -> CameraInfo:
 
     cap_config = config["capabilities"]
     supports_ir = cap_config["ir"].get(bool)
+    supports_stereo = cap_config["stereo"].get(bool)
 
-    return CameraInfo(frame_id=frame_id, supports_ir=supports_ir)
+    camera_info = CameraInfo(
+        supports_ir=supports_ir, supports_stereo=supports_stereo
+    )
+    camera_info.header.frame_id = frame_id
+    return camera_info
 
 
 def main() -> None:
