@@ -11,8 +11,8 @@
 
     <!-- Left camera -->
     <include file="$(find libcamera_device)/launch/full_hd_video.launch">
-        <arg name="node_name" value="$(arg node_name)_left" />
-        <arg name="frame_id" value="$(arg frame_id)_left" />
+        <arg name="node_name" value="$(arg node_name)" />
+        <arg name="frame_id" value="$(arg frame_id)" />
         <arg name="device_id" value="1"/>
         <arg name="quality" value="4"/>
         <arg name="encoder" value="$(arg encoder)" />
@@ -34,7 +34,7 @@
     </include>
     <!-- Synchronize cameras -->
     <include file="$(find mars_camera_hw_manager)/launch/camera_sync.launch">
-        <arg name="primary_camera_id" value="$(arg node_name)_left" />
+        <arg name="primary_camera_id" value="$(arg node_name)" />
         <arg name="secondary_camera_id" value="$(arg node_name)_right" />
     </include>
 </launch>
