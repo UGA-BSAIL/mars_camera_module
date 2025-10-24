@@ -12,6 +12,7 @@
 #include <libcamera/orientation.h>
 #include <linux/dma-buf.h>
 #include <linux/videodev2.h>
+#include <rosconsole/macros_generated.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -1001,6 +1002,7 @@ void RPiCamApp::setupCapture()
 	for (auto &config : *configuration_)
 		config.stride = 0;
 	CameraConfiguration::Status validation = configuration_->validate();
+        LOG(0, "Configured orientation: " << configuration_->orientation);
 	if (validation == CameraConfiguration::Invalid)
 		throw std::runtime_error("failed to valid stream configurations");
 	else if (validation == CameraConfiguration::Adjusted)

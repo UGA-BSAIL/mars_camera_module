@@ -2,9 +2,9 @@
 
 #include <hailort.h>
 #include <libcamera/pixel_format.h>
+#include <libcamera_device/Detection.h>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
-#include <libcamera_device/Detection.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -302,6 +302,7 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->afWindow_height = new_options.afWindow_height;
   options->post_process_libs = new_options.post_process_libs;
   options->post_process_file = new_options.post_process_file;
+  options->transform = new_options.transform;
 
   // Apply the new configuration.
   camera_app_->ReConfigureFromOptions();
