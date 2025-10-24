@@ -340,6 +340,7 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->afWindow_height = new_options.afWindow_height;
   options->post_process_libs = new_options.post_process_libs;
   options->post_process_file = new_options.post_process_file;
+  options->transform = new_options.transform;
 
   // Apply the new configuration.
   camera_app_->ReConfigureFromOptions();

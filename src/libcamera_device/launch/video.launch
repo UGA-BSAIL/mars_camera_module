@@ -10,10 +10,16 @@
     <arg name="device_id" default="0"/>
     <!-- The quality value to use. For MJPEG, this is the equivalent of setting the -q flag. -->
     <arg name="quality" default="2"/>
+    <!-- The width of the output image in pixels. -->
+    <arg name="width" default="1920"/>
+    <!-- The height of the output image in pixels. -->
+    <arg name="height" default="1080"/>
     <!-- The maximum FPS to allow from the camera. -->
     <arg name="fps" default="30"/>
     <!-- The file defining the post-processing configuration to use. -->
     <arg name="postprocess_file" default=""/>
+    <!-- The transform to apply to the images. Supports "none" or "hflip". -->
+    <arg name="transform" default="none"/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/qmax" value="$(arg quality)"/>
@@ -21,8 +27,9 @@
         <param name="ffmpeg/profile" value="baseline" />
         <param name="ffmpeg/bit_rate" value="16000000" />
         <param name="fps" value="$(arg fps)"/>
-        <param name="width" value="1920"/>
-        <param name="height" value="1080"/>
+        <param name="width" value="$(arg width)"/>
+        <param name="height" value="$(arg height)"/>
+        <param name="transform" value="$(arg transform)"/>
         <param name="frame_id" value="$(arg frame_id)"/>
         <param name="device_id" value="$(arg device_id)"/>
         <param name="postprocess_file" value="$(arg postprocess_file)"/>

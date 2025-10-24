@@ -37,7 +37,7 @@ RUN cd libcamera \
     ninja -C build install
 
 # Install runtime dependencies.
-RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev libv4l-dev \
+RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev libv4l-dev libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ffmpeg.

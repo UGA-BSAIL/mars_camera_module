@@ -36,6 +36,12 @@ struct StaticConfig {
   int32_t device_id;
 };
 
+/// Maps transform enum values to Libcamera transforms.
+std::unordered_map<std::string, libcamera::Transform> kTransformMap{
+    {"none", libcamera::Transform::Identity},
+    {"h_flip", libcamera::Transform::HFlip},
+};
+
 /**
  * @brief Publishes the encoded image.
  * @param image_publisher The publisher for the image.
@@ -110,6 +116,16 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->sharpness = static_cast<float>(dynamic_config.sharpness);
 
   out_config->post_process_file = dynamic_config.postprocess_file;
+
+  // Configure transformation.
+  out_config->transform = libcamera::Transform::Identity;
+  if (const auto kTransform = kTransformMap.find(dynamic_config.transform);
+      kTransform == kTransformMap.end()) {
+    ROS_ERROR_STREAM("Got unknown transform type '" << dynamic_config.transform
+                                                    << "', ignoring.");
+  } else {
+    out_config->transform = kTransform->second;
+  }
 }
 
 /**
@@ -127,6 +143,12 @@ void ReconfigureParams(CameraMessenger* messenger,
   VideoOptions camera_options;
   ParamToVideoConfig(static_config, dynamic_config, &camera_options);
 
+
+  if (level & 0x8) {
+    // Restart the camera.
+    ROS_INFO_STREAM("Restarting camera due to configuration change...");
+    messenger->Stop();
+  }
   if (level & 0x1) {
     // Set standard options.
     ROS_INFO_STREAM("Reconfigure request: " << dynamic_config.width << "x"
