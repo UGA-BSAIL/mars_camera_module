@@ -126,7 +126,16 @@ def _transcode_video(
         .input(input_file.as_posix(), {"c:v": decoder, "r": 24})
         .output(
             output_file.as_posix(),
-            {"c:v": encoder, "b:v": bitrate, "movflags": "+faststart"},
+            {
+                "c:v": encoder,
+                "b:v": bitrate,
+                "movflags": "+faststart",
+                # This magic filter detects videos that are recorded in
+                # portrait (such as from the stereo cameras),
+                # and automatically rotates them. Landscape videos are not
+                # affected.
+                "vf": "rotate='if(lt(iw,ih),-PI/2,0)':ow='max(iw,ih)':oh='min(iw,ih)'",
+            },
         )
     )
 
