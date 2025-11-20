@@ -22,7 +22,6 @@ from pandas.errors import EmptyDataError
 
 from .launch_manager import LaunchManager
 
-
 SPLIT_BAG_LAUNCH = ("ffmpeg_image_transport_tools", "split_bag_mars.launch")
 """
 Launch file to use for extracting video data from the bag files.
@@ -43,7 +42,7 @@ def _split_bag(
             it remains responsive to the user.
 
     """
-    out_file_base = output_dir / "camera_"
+    out_file_base = output_dir / "mars_"
 
     # Start the node.
     launcher = LaunchManager(
@@ -249,7 +248,7 @@ def process_bag(
         )
 
         # Find extracted video files.
-        video_files = set(video_dir.glob("camera_*"))
+        video_files = set(video_dir.glob("mars_camera*"))
         # Ignore timestamps.
         video_files -= set(video_dir.glob("*.txt"))
         video_files = sorted(video_files)
@@ -266,7 +265,7 @@ def process_bag(
 
         # Transcode those videos.
         for i, video_file in enumerate(video_files):
-            output_file = output_base.parent / f"{output_base.name}_cam{i}.mp4"
+            output_file = output_base.parent / f"{video_file.stem}.mp4"
             video_output_files.append(output_file)
             decoder = decoders[video_file.suffix]
             try:
