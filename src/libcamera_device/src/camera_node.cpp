@@ -5,6 +5,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <libcamera_device/FrameDetections.h>
+#include <libcamera_device/FrameMotion.h>
 #include <libcamera_device/LibcameraDeviceConfig.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
@@ -52,11 +53,21 @@ void PublishEncoded(ImagePublisher *publisher, const Image &image) {
 /**
  * Publishes camera detections. This is meant to be used as a callback.
  * @param publisher Will be used for publishing detections.
- * @param detections The detections to publish.
+ * @param motion The detections to publish.
  */
 void PublishDetections(ros::Publisher *publisher,
-                       const libcamera_device::FrameDetections &detections) {
-  publisher->publish(detections);
+                       const libcamera_device::FrameDetections &motion) {
+  publisher->publish(motion);
+}
+
+/**
+ * Publishes camera motion estimates. This is meant to be used as a callback.
+ * @param publisher Will be used for publishing detections.
+ * @param motion The detections to publish.
+ */
+void PublishMotion(ros::Publisher *publisher,
+                   const libcamera_device::FrameMotion &motion) {
+  publisher->publish(motion);
 }
 
 /**
@@ -133,12 +144,12 @@ void ReconfigureParams(CameraMessenger *messenger,
   }
 
   try {
-      messenger->Start();
+    messenger->Start();
   } catch (const std::runtime_error &e) {
-      ROS_FATAL_STREAM("Failed to start camera: " << e.what());
-      // There's no easy way to recover from this. The best policy is to exit
-      // and let systemd restart.
-      exit(1);
+    ROS_FATAL_STREAM("Failed to start camera: " << e.what());
+    // There's no easy way to recover from this. The best policy is to exit
+    // and let systemd restart.
+    exit(1);
   }
 }
 
@@ -152,9 +163,11 @@ void ReconfigureParams(CameraMessenger *messenger,
  */
 void WaitForSubscriber(ImagePublisher &image_publisher,
                        ros::Publisher &detection_publisher,
+                       ros::Publisher &motion_publisher,
                        const ros::NodeHandle &node, CameraMessenger *camera) {
   if (image_publisher.getNumSubscribers() > 0 ||
-      detection_publisher.getNumSubscribers() > 0) {
+      detection_publisher.getNumSubscribers() > 0 ||
+      motion_publisher.getNumSubscribers() > 0) {
     // We already have a subscriber, so we're done before we even started.
     return;
   }
@@ -166,7 +179,8 @@ void WaitForSubscriber(ImagePublisher &image_publisher,
   camera->Stop();
   ROS_INFO_STREAM("Waiting for a camera subscriber...");
   while (node.ok() && image_publisher.getNumSubscribers() == 0 &&
-         detection_publisher.getNumSubscribers() == 0) {
+         detection_publisher.getNumSubscribers() == 0 &&
+         motion_publisher.getNumSubscribers() == 0) {
     rate.sleep();
     ros::spinOnce();
   }
@@ -187,7 +201,8 @@ int main(int argc, char **argv) {
   node.param<std::string>("frame_id", frame_id, "frame");
   node.param<int32_t>("device_id", device_id, 0);
 
-  ROS_INFO_STREAM("Starting camera node for device " << device_id << " and frame " << frame_id << "...");
+  ROS_INFO_STREAM("Starting camera node for device "
+                  << device_id << " and frame " << frame_id << "...");
 
   // Create a publisher for images.
   ImageTransport image_transport(node);
@@ -196,6 +211,9 @@ int main(int argc, char **argv) {
   // Create a publisher for detections.
   auto detection_publisher =
       node.advertise<libcamera_device::FrameDetections>("detections", 10);
+  // Create a publisher for motion.
+  auto motion_publisher =
+      node.advertise<libcamera_device::FrameMotion>("motion", 10);
 
   Server<LibcameraDeviceConfig> param_server;
 
@@ -214,6 +232,8 @@ int main(int argc, char **argv) {
       std::bind(PublishEncoded, &image_publisher, kStd1));
   camera.SetDetectionsReadyCallback(
       std::bind(PublishDetections, &detection_publisher, kStd1));
+  camera.SetMotionReadyCallback(
+      std::bind(PublishMotion, &motion_publisher, kStd1));
 
   // Configure the dynamic reconfiguration callback.
   Server<LibcameraDeviceConfig>::CallbackType reconfigure_callback =
@@ -228,7 +248,8 @@ int main(int argc, char **argv) {
   }
   ROS_DEBUG_STREAM("Camera initialized!");
   while (node.ok() && camera.WaitForFrame()) {
-    WaitForSubscriber(image_publisher, detection_publisher, node, &camera);
+    WaitForSubscriber(image_publisher, detection_publisher, motion_publisher,
+                      node, &camera);
     ros::spinOnce();
   }
 

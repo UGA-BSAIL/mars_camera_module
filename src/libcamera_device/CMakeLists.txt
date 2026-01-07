@@ -53,6 +53,7 @@ find_package(catkin REQUIRED COMPONENTS
    FILES
    Detection.msg
    FrameDetections.msg
+   FrameMotion.msg
  )
 
 ## Generate services in the 'srv' folder

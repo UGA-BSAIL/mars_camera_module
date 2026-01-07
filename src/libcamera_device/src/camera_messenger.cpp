@@ -2,9 +2,9 @@
 
 #include <hailort.h>
 #include <libcamera/pixel_format.h>
+#include <libcamera_device/Detection.h>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
-#include <libcamera_device/Detection.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -95,13 +95,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
   // Create the message for this image.
   sensor_msgs::Image message;
 
-  // Sensor timestamps are from the kernel clock, but we want them relative to
-  // the wall clock.
-  const uint64_t kWallTimestampUs = KernelToRosClock(timestamp_us);
-  message.header.stamp.sec = kWallTimestampUs / 1000000;
-  message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
-  message.header.seq = image_message_sequence_++;
-  message.header.frame_id = frame_id_;
+  FillHeader(&message.header, timestamp_us, image_message_sequence_++);
 
   message.height = stream_info_.height;
   message.width = stream_info_.width;
@@ -123,19 +117,8 @@ void CameraMessenger::TranslateDetections(
     const CompletedRequestPtr &completed_request) {
   FrameDetections detections_message;
 
-  // Sensor timestamps are from the kernel clock, but we want them relative to
-  // the wall clock.
-  if (const auto kSensorTimeNs =
-          completed_request->metadata.get(controls::SensorTimestamp)) {
-    const uint64_t kWallTimestampUs = KernelToRosClock(*kSensorTimeNs / 1000);
-    detections_message.header.stamp.sec = kWallTimestampUs / 1000000;
-    detections_message.header.stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
-  } else {
-    // Just use current time.
-    detections_message.header.stamp = ros::Time::now();
-  }
-  detections_message.header.seq = detection_message_seqeunce_++;
-  detections_message.header.frame_id = frame_id_;
+  FillHeaderFromMeta(&detections_message.header, completed_request,
+                     detection_message_sequence_++);
 
   // Convert each detection.
   std::vector<postproc::Detection> detections;
@@ -186,16 +169,44 @@ void CameraMessenger::TranslateDetections(
   }
 }
 
+void CameraMessenger::TranslateMotion(
+    const CompletedRequestPtr &completed_request) {
+  uint32_t regions_with_motion;
+  if (completed_request->post_process_metadata.Get(
+          "motion_detect.regions_above_threshold", regions_with_motion)) {
+    // This is a pretty common case, because usually we don't run motion
+    // estimation on every frame.
+    return;
+  }
+
+  // Fill in the message.
+  FrameMotion motion_message;
+  FillHeaderFromMeta(&motion_message.header, completed_request,
+                     motion_message_sequence_++);
+  motion_message.estimated_motion = regions_with_motion;
+
+  // Call the callback with the new message.
+  if (on_motion_ready_) {
+    on_motion_ready_(motion_message);
+  }
+}
+
 void CameraMessenger::SetMessageReadyCallback(
-    const CameraMessenger::MessageReadyCallback &callback) {
+    const ImageReadyCallback &callback) {
   ROS_DEBUG_STREAM("Setting new callback for camera messages.");
   on_message_ready_ = callback;
 }
 
 void CameraMessenger::SetDetectionsReadyCallback(
-    const CameraMessenger::DetectionsReadyCallback &callback) {
+    const DetectionsReadyCallback &callback) {
   ROS_DEBUG_STREAM("Setting new callback for detections.");
   on_detections_ready_ = callback;
+}
+
+void CameraMessenger::SetMotionReadyCallback(
+    const MotionReadyCallback &callback) {
+  ROS_DEBUG_STREAM("Setting new callback for motion.");
+  on_motion_ready_ = callback;
 }
 
 void CameraMessenger::Start() {
@@ -263,6 +274,7 @@ bool CameraMessenger::WaitForFrame() {
   auto &completed_request = std::get<CompletedRequestPtr>(message.payload);
   camera_app_->EncodeBuffer(completed_request, camera_app_->VideoStream());
   TranslateDetections(completed_request);
+  TranslateMotion(completed_request);
 
   return true;
 }
@@ -276,6 +288,32 @@ void CameraMessenger::UpdateStreamInfo() {
                         "Got pixel format " << stream_info_.pixel_format
                                             << ", which is not supported.");
   ros_pixel_format_ = encoding->second;
+}
+void CameraMessenger::FillHeader(std_msgs::Header *header,
+                                 uint32_t timestamp_us,
+                                 uint32_t sequence_num) const {
+  // Sensor timestamps are from the kernel clock, but we want them relative to
+  // the wall clock.
+  const uint64_t kWallTimestampUs = KernelToRosClock(timestamp_us);
+  header->stamp.sec = kWallTimestampUs / 1000000;
+  header->stamp.nsec = (kWallTimestampUs % 1000000) * 1000;
+  header->frame_id = frame_id_;
+  header->seq = sequence_num;
+}
+
+void CameraMessenger::FillHeaderFromMeta(
+    std_msgs::Header *header, const CompletedRequestPtr &completed_request,
+    uint32_t sequence_num) const {
+  // Sensor timestamps are from the kernel clock, but we want them relative to
+  // the wall clock.
+  if (const auto kSensorTimeNs =
+          completed_request->metadata.get(controls::SensorTimestamp)) {
+    FillHeader(header, *kSensorTimeNs / 1000, sequence_num);
+  } else {
+    // Just use current time.
+    FillHeader(header, 0U, sequence_num);
+    header->stamp = ros::Time::now();
+  }
 }
 
 void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {

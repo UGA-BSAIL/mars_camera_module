@@ -63,6 +63,8 @@ private:
 	unsigned int region_threshold_;
 	std::vector<uint8_t> previous_frame_;
 	bool first_time_;
+        // Number of regions above the motion threshold.
+        unsigned int regions_above_threshold_ = 0;
 	bool motion_detected_;
 	std::mutex mutex_;
 };
@@ -152,6 +154,7 @@ bool MotionDetectStage::Process(CompletedRequestPtr &completed_request)
 		}
 
 		completed_request->post_process_metadata.Set("motion_detect.result", motion_detected_);
+                completed_request->post_process_metadata.Set("motion_detect.regions_above_threshold", regions_above_threshold_);
 
 		return false;
 	}
@@ -179,7 +182,9 @@ bool MotionDetectStage::Process(CompletedRequestPtr &completed_request)
 		LOG(1, "Motion " << (motion_detected ? "detected" : "stopped"));
 
 	motion_detected_ = motion_detected;
+        regions_above_threshold_ = regions;
 	completed_request->post_process_metadata.Set("motion_detect.result", motion_detected);
+        completed_request->post_process_metadata.Set("motion_detect.regions_above_threshold", regions);
 
 	return false;
 }

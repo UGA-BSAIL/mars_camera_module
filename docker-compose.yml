@@ -12,4 +12,4 @@ services:
     ports:
       - "1825:22"
     volumes:
-      - .:/home/ros/ros_libcamera
+      - .:/home/ros/mars_camera_module

@@ -27,5 +27,6 @@
         <param name="device_id" value="$(arg device_id)"/>
         <param name="postprocess_file" value="$(arg postprocess_file)"/>
     	<remap from="detections" to="/$(arg node_name)/detections"/>
+    	<remap from="motion" to="/$(arg node_name)/motion"/>
     </node>
 </launch>
