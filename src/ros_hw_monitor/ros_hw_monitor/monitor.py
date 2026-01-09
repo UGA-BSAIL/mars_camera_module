@@ -3,8 +3,7 @@ from pathlib import Path
 
 import psutil
 
-import rospy
-from ros_hw_monitor.msg import Process
+from ros_hw_monitor_msgs.msg import Process
 
 try:
     from hailo_platform import Device
@@ -18,13 +17,15 @@ class Monitor:
     Monitors basic hardware info for the device it is running on.
     """
 
-    def __init__(self):
+    def __init__(self, logger):
+        self.__logger = logger
+
         self.__hailo_devices = []
         if Device is not None:
             # Enumerate HAILO targets.
             devices_info = Device.scan()
             self.__hailo_devices = [Device(d) for d in devices_info]
-            rospy.loginfo(f"Found {len(devices_info)} HAILO devices.")
+            self.__logger.info(f"Found {len(devices_info)} HAILO devices.")
 
     @staticmethod
     def __message_from_process(process: psutil.Process) -> Process:
@@ -80,4 +81,4 @@ class Monitor:
             hailo_temp = device.control.get_chip_temperature().ts0_temperature
             max_hailo_temp = max(hailo_temp, max_hailo_temp)
 
-        return cpu_temp, -1, max_hailo_temp
+        return cpu_temp, -1.0, max_hailo_temp

@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Any
 
 from .monitor import Monitor
 
@@ -15,7 +15,9 @@ class JetsonMonitor(Monitor):
     Specialized monitor for the Jetson.
     """
 
-    def __init__(self):
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
         self.__jetson = jtop()
         self.__jetson.start()
 
