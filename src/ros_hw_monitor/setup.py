@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            "hw_monitor = ros_hw_monitor.hw_monitor_node:main"
+            'hw_monitor = ros_hw_monitor.hw_monitor_node:main'
         ],
     },
 )

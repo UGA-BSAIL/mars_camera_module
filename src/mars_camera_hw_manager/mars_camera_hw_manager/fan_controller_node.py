@@ -3,11 +3,12 @@ from bisect import bisect_left
 
 from gpiozero import PWMLED
 
-import rospy
-from ros_hw_monitor.msg import System
+import rclpy
+from rclpy.node import Node
+from ros_hw_monitor_msgs.msg import System
 
 
-class FanController:
+class FanController(Node):
     """
     Handles controlling the fan.
     """
@@ -27,18 +28,24 @@ class FanController:
     Amount of hysteresis, in C.
     """
 
-    def __init__(self, fan_pin: int):
-        """
-        Args:
-            fan_pin: The GPIO pin that the fan is connected to.
+    def __init__(self):
+        super().__init__("fan_controller")
 
-        """
+        self.declare_parameter("fan_pin", 12)
+
         # We can use the PWMLED class to control the fan.
-        self.__fan = PWMLED(fan_pin)
+        self.__fan = PWMLED(self.get_parameter("fan_pin").value)
         # Default to 100% before we read the temperature.
         self.__fan.value = 1.0
         # Time at which we started the fan test.
         self.__fan_test_start_time = time.time()
+
+        self.create_subscription(
+            System,
+            "system_info",
+            self.on_system_message,
+            10
+        )
 
     def __temp_to_speed(self, temp: float) -> float:
         """
@@ -96,18 +103,13 @@ class FanController:
 
         # Set the speed.
         if speed != self.__fan.value:
-            rospy.loginfo(f"Setting fan speed to {speed}.")
+            self.get_logger().info(f"Setting fan speed to {speed}.")
             self.__fan.value = speed
 
 
 def main() -> None:
-    rospy.init_node("fan_controller", anonymous=True)
-
-    controller = FanController(int(rospy.get_param("~fan_pin")))
-    rospy.Subscriber(
-        "~system_info",
-        System,
-        controller.on_system_message,
-    )
-
-    rospy.spin()
+    rclpy.init()
+    controller = FanController()
+    rclpy.spin(controller)
+    controller.destroy_node()
+    rclpy.shutdown()

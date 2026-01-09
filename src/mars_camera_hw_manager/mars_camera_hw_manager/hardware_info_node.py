@@ -4,11 +4,10 @@
 Node that broadcasts information about the camera module hardware.
 """
 
-
 import confuse
-import rospy
-
-from mars_camera_hw_manager.msg import CameraInfo
+import rclpy
+from rclpy.node import Node
+from mars_camera_hw_manager_msgs.msg import CameraInfo
 
 
 # Set up Confuse.
@@ -31,16 +30,22 @@ def _make_info_message() -> CameraInfo:
     return CameraInfo(frame_id=frame_id, supports_ir=supports_ir)
 
 
+class CameraHWInfoNode(Node):
+    def __init__(self):
+        super().__init__('camera_hw_info')
+
+        # Get the camera info message and publish it.
+        self.publisher = self.create_publisher(CameraInfo, 'camera_info', 10)
+        message = _make_info_message()
+        self.publisher.publish(message)
+        self.get_logger().info("Published camera hardware info.")
+
+
 def main() -> None:
-    rospy.init_node("camera_hw_info", anonymous=True)
-
-    # Get the camera info message and publish it.
-    publisher = rospy.Publisher("~camera_info", CameraInfo, queue_size=10, latch=True)
-    message = _make_info_message()
-    publisher.publish(message)
-
-    rospy.loginfo("Published camera hardware info.")
-    rospy.spin()
+    rclpy.init()
+    node = CameraHWInfoNode()
+    rclpy.spin(node)
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 
 # If true, it will shutdown the camera module immediately.
 bool shutdown

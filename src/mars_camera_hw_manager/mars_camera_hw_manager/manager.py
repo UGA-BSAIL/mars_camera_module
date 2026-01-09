@@ -2,7 +2,6 @@
 Implements actual hardware management tasks.
 """
 
-import rospy
 import subprocess
 
 
@@ -11,11 +10,18 @@ class Manager:
     Implements actual hardware management tasks.
     """
 
-    @staticmethod
-    def shutdown() -> None:
+    def __init__(self, logger):
+        """
+        Args:
+            logger: The ROS logger to use.
+
+        """
+        self.__logger = logger
+
+    def shutdown(self) -> None:
         """
         Shuts down the camera module.
 
         """
-        rospy.loginfo("Got shutdown command.")
+        self.__logger.info("Got shutdown command.")
         subprocess.run(["/sbin/shutdown", "-h", "now"])
