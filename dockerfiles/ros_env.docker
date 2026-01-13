@@ -7,7 +7,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install ROS dependencies.
 RUN apt-get update && apt-get install -y \
-    ros-humble-image-transport ros-humble-vision-opencv python3-colcon-common-extensions
+    ros-humble-image-transport ros-humble-vision-opencv python3-colcon-common-extensions \
+    ros-humble-ament-cmake-clang-format ros-humble-ament-cmake-black ros-humble-rosidl-typesupport-c
 
 # Add ros user.
 ARG ROS_UID

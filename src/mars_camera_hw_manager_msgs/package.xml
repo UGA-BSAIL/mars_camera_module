@@ -3,7 +3,7 @@
 <package format="3">
   <name>mars_camera_hw_manager_msgs</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Custom messages for the `mars_camera_hw_manager` package.</description>
   <maintainer email="daniel.petti@ufl.edu">Daniel Petti</maintainer>
   <license>MIT</license>
 
