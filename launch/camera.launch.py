@@ -3,16 +3,19 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shut
 from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory, get_package_lib_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 import os
+from pathlib import Path
 
 
 def generate_camera_node(*, device_id: int, quality: int, postprocess_file: LaunchConfiguration):
-    libcamera_device_dir = get_package_lib_directory('libcamera_device')
+    package_prefix = get_package_prefix('libcamera_device')
+    bin_dir = Path(package_prefix) / 'lib' / 'libcamera_device'
+
     return LaunchDescription([
         Node(
             package='libcamera_device',
-            executable=os.path.join(libcamera_device_dir, 'libcamera_device_node'),
+            executable=bin_dir / 'libcamera_device_node',
             # prefix=['gdbserver localhost:3000'],
             name=LaunchConfiguration('node_name'),
             output='screen',
@@ -23,11 +26,11 @@ def generate_camera_node(*, device_id: int, quality: int, postprocess_file: Laun
                 'ffmpeg/encoder': LaunchConfiguration('encoder'),
                 'ffmpeg/profile': 'baseline',
                 'ffmpeg/bit_rate': 16000000,
-                'fps': '24',
+                'fps': 24,
                 'width': 1920,
                 'height': 1080,
                 'frame_id': LaunchConfiguration('frame_id'),
-                'device_id': str(device_id),
+                'device_id': device_id,
                 'postprocess_file': postprocess_file,
             }],
             remappings=[
