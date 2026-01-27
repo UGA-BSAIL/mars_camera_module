@@ -5,7 +5,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('node_name', default_value='camera'),
+        DeclareLaunchArgument('camera_name', default_value='camera'),
         DeclareLaunchArgument('frame_id', default_value='frame'),
         DeclareLaunchArgument('encoder', default_value='h264_v4l2m2m'),
         DeclareLaunchArgument('device_id', default_value='0'),
@@ -17,7 +17,7 @@ def generate_launch_description():
             package='libcamera_device',
             executable='libcamera_device_node',
             # prefix=['gdbserver localhost:3000'],
-            name=LaunchConfiguration('node_name'),
+            name=LaunchConfiguration('camera_name'),
             output='screen',
             # This ensures the whole launch will shut down if this node exits
             on_exit=[Shutdown()],
@@ -34,8 +34,8 @@ def generate_launch_description():
                 'postprocess_file': LaunchConfiguration('postprocess_file'),
             }],
             remappings=[
-                ('detections', [ '/', LaunchConfiguration('node_name'), '/detections' ]),
-                ('motion', [ '/', LaunchConfiguration('node_name'), '/motion' ]),
+                ('detections', [ '/', LaunchConfiguration('camera_name'), '/detections' ]),
+                ('motion', [ '/', LaunchConfiguration('camera_name'), '/motion' ]),
             ],
         )
     ])

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.6)
 include(GNUInstallDirs)
 
 add_custom_target(PostprocLibCpp ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DPREFIX="${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}"
         -P ${CMAKE_CURRENT_LIST_DIR}/postproc_lib.cmake)
 set_source_files_properties(postproc_lib.cpp PROPERTIES GENERATED 1)
 
@@ -57,7 +58,8 @@ target_link_libraries(post_processing_stages ${TARGET_LIBS})
 target_compile_definitions(post_processing_stages PUBLIC OPENCV_PRESENT=${OpenCV_FOUND})
 target_compile_features(post_processing_stages PRIVATE cxx_std_17)
 
-install(TARGETS post_processing_stages LIBRARY DESTINATION lib/${PROJECT_NAME} ARCHIVE DESTINATION lib/${PROJECT_NAME})
+install(TARGETS post_processing_stages LIBRARY DESTINATION lib/${PROJECT_NAME}/post_processing_stages
+        ARCHIVE DESTINATION lib/${PROJECT_NAME}/post_processing_stages)
 
 list(APPEND ${PROJECT_NAME}_HEADERS
     histogram.hpp

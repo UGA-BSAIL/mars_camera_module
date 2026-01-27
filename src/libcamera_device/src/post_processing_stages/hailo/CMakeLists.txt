@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10)
-project(hailo_postprocessing)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 find_package(Tappas REQUIRED)
@@ -35,13 +34,13 @@ target_include_directories(hailo-postproc PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..
         ${HAILORT_INCLUDE_DIR} ${TAPPAS_INCLUDE_DIR})
 target_link_libraries(hailo-postproc PUBLIC ${HAILORT_LIBRARY} ${LIBCAMERA_LIBRARY})
 target_compile_options(hailo-postproc PRIVATE ${HAILO_CPP_ARGUMENTS})
-install(TARGETS hailo-postproc DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(TARGETS hailo-postproc DESTINATION lib/${PROJECT_NAME}/post_processing_stages)
 
-install(FILES ${HAILOPP_CONFIG_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/hailo-models)
+install(FILES ${HAILOPP_CONFIG_FILES} DESTINATION share/${PROJECT_NAME}/hailo-models)
 
 if (DOWNLOAD_HAILO_MODELS)
     add_custom_target(hailo-models
             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/utils/download-hailo-models.sh" "${CMAKE_CURRENT_BINARY_DIR}"
     )
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/hailo-models" DESTINATION ${CMAKE_INSTALL_PREFIX})
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/hailo-models" DESTINATION lib/${PROJECT_NAME})
 endif ()

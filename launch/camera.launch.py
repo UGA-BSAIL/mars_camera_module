@@ -1,45 +1,10 @@
+from launch_ros.actions import Node
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.substitutions import LaunchConfiguration, TextSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory, get_package_prefix
+from ament_index_python.packages import get_package_share_directory
 import os
-from pathlib import Path
-
-
-def generate_camera_node(*, device_id: int, quality: int, postprocess_file: LaunchConfiguration):
-    package_prefix = get_package_prefix('libcamera_device')
-    bin_dir = Path(package_prefix) / 'lib' / 'libcamera_device'
-
-    return LaunchDescription([
-        Node(
-            package='libcamera_device',
-            executable=bin_dir / 'libcamera_device_node',
-            # prefix=['gdbserver localhost:3000'],
-            name=LaunchConfiguration('node_name'),
-            output='screen',
-            # This ensures the whole launch will shut down if this node exits
-            on_exit=[Shutdown()],
-            parameters=[{
-                'ffmpeg/qmax': str(quality),
-                'ffmpeg/encoder': LaunchConfiguration('encoder'),
-                'ffmpeg/profile': 'baseline',
-                'ffmpeg/bit_rate': 16000000,
-                'fps': 24,
-                'width': 1920,
-                'height': 1080,
-                'frame_id': LaunchConfiguration('frame_id'),
-                'device_id': device_id,
-                'postprocess_file': postprocess_file,
-            }],
-            remappings=[
-                ('detections', ['/', LaunchConfiguration('node_name'), '/detections']),
-                ('motion', ['/', LaunchConfiguration('node_name'), '/motion']),
-            ],
-        )
-    ])
-
 
 def generate_launch_description():
     node_name_arg = DeclareLaunchArgument(
@@ -70,17 +35,45 @@ def generate_launch_description():
     )
 
     # Get package share directories
+    libcamera_device_dir = get_package_share_directory('libcamera_device')
     mars_camera_hw_manager_dir = get_package_share_directory('mars_camera_hw_manager')
 
-    rgb_node = generate_camera_node(device_id=0, quality=4, postprocess_file=LaunchConfiguration('postprocess_file'))
-    ir_node = generate_camera_node(device_id=1, quality=8, postprocess_file=LaunchConfiguration('ir_postprocess_file'))
+    rgb_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(libcamera_device_dir, 'launch', 'full_hd_video.launch.py')
+        ),
+        launch_arguments={
+            'camera_name': LaunchConfiguration('node_name'),
+            'frame_id': LaunchConfiguration('frame_id'),
+            'device_id': '0',
+            'quality': '4',
+            'encoder': LaunchConfiguration('encoder'),
+            'fps': '24',
+            'postprocess_file': LaunchConfiguration('postprocess_file')
+        }.items()
+    )
+
+    ir_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(libcamera_device_dir, 'launch', 'full_hd_video.launch.py')
+        ),
+        launch_arguments={
+            'camera_name': [LaunchConfiguration('node_name'), '_ir'],
+            'frame_id': [LaunchConfiguration('frame_id'), '_ir'],
+            'device_id': '1',
+            'quality': '8',
+            'encoder': LaunchConfiguration('encoder'),
+            'fps': '24',
+            'postprocess_file': LaunchConfiguration('ir_postprocess_file')
+        }.items()
+    )
 
     cam_manager_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(mars_camera_hw_manager_dir, 'launch', 'manager.launch.py')
         ),
         launch_arguments={
-            'camera_id': LaunchConfiguration('node_name')
+            'manager_name': LaunchConfiguration('node_name')
         }.items()
     )
 
@@ -90,7 +83,7 @@ def generate_launch_description():
         encoder_arg,
         postprocess_file_arg,
         ir_postprocess_file_arg,
-        rgb_node,
-        ir_node,
-        cam_manager_launch
+        rgb_launch,
+        ir_launch,
+        cam_manager_launch,
     ])
