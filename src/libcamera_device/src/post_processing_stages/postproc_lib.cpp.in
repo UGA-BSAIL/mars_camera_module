@@ -1,0 +1,4 @@
+#include "postproc_lib.h"
+
+
+const std::string POSTPROC_LIB_DIR("@POSTPROC_LIB_DIR@");

@@ -8,7 +8,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Install ROS dependencies.
 RUN apt-get update && apt-get install -y \
     ros-humble-image-transport ros-humble-vision-opencv python3-colcon-common-extensions \
-    ros-humble-ament-cmake-clang-format ros-humble-ament-cmake-black ros-humble-rosidl-typesupport-c
+    ros-humble-ament-cmake-clang-format ros-humble-ament-cmake-black ros-humble-rosidl-typesupport-c \
+    libboost-dev libboost-program-options-dev
 
 # Add ros user.
 ARG ROS_UID
@@ -36,7 +37,7 @@ RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yam
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 50
 RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 50
 RUN pip3 install meson
-RUN git clone --depth 1 --branch v0.5.0+rpt20250429 https://github.com/raspberrypi/libcamera.git
+RUN git clone --depth 1 --branch v0.5.2+rpt20250903 https://github.com/raspberrypi/libcamera.git
 RUN cd libcamera \
     && meson build --buildtype=release -Dpipelines=rpi/vc4 -Dipas=rpi/vc4 \
     -Dv4l2=true -Dgstreamer=disabled -Dtest=false -Dlc-compliance=disabled -Dcam=disabled -Dqcam=disabled \

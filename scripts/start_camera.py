@@ -1,12 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 
 """
-This script handles deployment and management of the camera code.
+This script handles deployment and management of the camera code for ROS2.
 """
 
 
-from functools import cache, partial
+from functools import cache
 import os
 import signal
 import sys
@@ -15,12 +15,14 @@ from typing import Any
 import confuse
 from loguru import logger
 from netifaces import interfaces, AF_INET, ifaddresses
-import roslaunch
-
+import launch
+from launch import LaunchService
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import IncludeLaunchDescription
 
 ROS_INTERFACE_NAME = "eth0"
 """
-The name of the network interface that we are connected to the ROS master on.
+The name of the network interface that we are connected to the ROS2 system on.
 """
 
 
@@ -30,18 +32,10 @@ config = confuse.Configuration("camera_module", "config")
 
 @cache
 def _get_local_ip() -> str:
-    """
-    Gets the ethernet IP address of this camera module.
-
-    Returns:
-        The IP address of this module.
-
-    """
     assert (
         ROS_INTERFACE_NAME in interfaces()
     ), f"{ROS_INTERFACE_NAME} is not a valid network interface!"
 
-    # Get the associated addresses.
     inet_address = ifaddresses(ROS_INTERFACE_NAME)[AF_INET]
     if len(inet_address) > 1:
         logger.warning("Found multiple inet addresses. Using the first one.")
@@ -52,84 +46,48 @@ def _get_local_ip() -> str:
 
 
 def _configure_env() -> None:
-    """
-    Sets the proper environment variables for ROS.
-
-    """
-    os.environ["ROS_MASTER_URI"] = config["ros_master_uri"].as_str()
+    os.environ["ROS_LOCALHOST_ONLY"] = "0"
     os.environ["ROS_IP"] = _get_local_ip()
 
 
-def _run_camera() -> roslaunch.parent.ROSLaunchParent:
-    """
-    Runs the camera code.
+def main() -> None:
+    _configure_env()
 
-    Returns:
-        Returns the launcher.
-
-    """
-    # Start the node.
-    launch_file = config["launch_file"].as_path()
+    launch_file = config["launch_file"].as_path().as_posix()  # Path to *.launch.py
     node_name = config["node_name"].as_str()
     frame_id = config["frame_id"].as_str()
-    model_dir = config["hailo"]["model_dir"].as_path()
-    logger.info("Launching {}...", launch_file)
-
-    # Choose the proper encoder based on the hardware capabilities.
-    capabilities = config["capabilities"]
-    if capabilities["hw_video_encode"].get(bool):
+    model_dir = config["hailo"]["model_dir"].as_path() if "hailo" in config else ""
+    capabilities = config["capabilities"] if "capabilities" in config else None
+    if capabilities and capabilities["hw_video_encode"].get(bool):
         encoder = "h264_v4l2m2m"
     else:
         encoder = "mjpeg"
     logger.debug("Selected encoder: {}", encoder)
 
-    launch_file = roslaunch.rlutil.resolve_launch_arguments(
-        (launch_file.as_posix(), "--wait")
-    )[0]
-    uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-    launcher = roslaunch.parent.ROSLaunchParent(
-        uuid,
-        [
-            (
-                launch_file,
-                [
-                    f"node_name:={node_name}",
-                    f"frame_id:={frame_id}",
-                    f"encoder:={encoder}",
-                    f"model_dir:={model_dir}",
-                ],
-            )
-        ],
-    )
-    launcher.start()
+    launch_args = [
+        ("node_name", node_name),
+        ("frame_id", frame_id),
+        ("encoder", encoder),
+        ("model_dir", str(model_dir)),
+    ]
 
-    return launcher
+    logger.info("Launching {} with args {}...", launch_file, launch_args)
+    launch_service = LaunchService()
+    launch_description = launch.LaunchDescription([
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(launch_file),
+            launch_arguments=launch_args,
+        )
+    ])
+    launch_service.include_launch_description(launch_description)
 
+    def shutdown_handler(*_: Any):
+        logger.info("Got exit signal. Stopping launch service...")
+        sys.exit(0)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
 
-def _on_program_exit(launcher: roslaunch.parent.ROSLaunchParent, *_: Any) -> None:
-    """
-    Handler that should run when the program exits, and cleans everything up.
-
-    Args:
-        launcher: The ROS launcher that is running.
-
-    """
-    logger.info("Got exit signal, stopping ROS...")
-    launcher.shutdown()
-
-    sys.exit()
-
-
-def main() -> None:
-    _configure_env()
-    launcher = _run_camera()
-
-    # Run a handler when we exit to stop ROS.
-    handler = partial(_on_program_exit, launcher)
-    signal.signal(signal.SIGINT, handler)
-    signal.signal(signal.SIGTERM, handler)
-
-    launcher.spin()
+    sys.exit(launch_service.run())
 
 
 if __name__ == "__main__":
