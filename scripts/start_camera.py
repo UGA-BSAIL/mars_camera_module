@@ -60,14 +60,17 @@ def main() -> None:
     capabilities = config["capabilities"] if "capabilities" in config else None
     if capabilities and capabilities["hw_video_encode"].get(bool):
         encoder = "h264_v4l2m2m"
+        pixel_format = "yuv420p"
     else:
         encoder = "mjpeg"
+        pixel_format = "yuvj420p"
     logger.debug("Selected encoder: {}", encoder)
 
     launch_args = [
         ("node_name", node_name),
         ("frame_id", frame_id),
         ("encoder", encoder),
+        ("pixel_format", pixel_format),
         ("model_dir", str(model_dir)),
     ]
 

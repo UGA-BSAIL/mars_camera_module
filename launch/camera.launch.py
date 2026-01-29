@@ -19,6 +19,10 @@ def generate_launch_description():
         "encoder", default_value=TextSubstitution(text="h264_v4l2m2m"),
         description="The ffmpeg encoder name to use."
     )
+    pixel_format_arg = DeclareLaunchArgument(
+        "pixel_format", default_value=TextSubstitution(text="yuv420p"),
+        description="The pixel format to use for the encoder."
+    )
     postprocess_file_arg = DeclareLaunchArgument(
         "postprocess_file",
         default_value=TextSubstitution(
@@ -48,6 +52,7 @@ def generate_launch_description():
             'device_id': '0',
             'quality': '4',
             'encoder': LaunchConfiguration('encoder'),
+            'pixel_format': LaunchConfiguration('pixel_format'),
             'fps': '24',
             'postprocess_file': LaunchConfiguration('postprocess_file')
         }.items()
@@ -63,6 +68,7 @@ def generate_launch_description():
             'device_id': '1',
             'quality': '8',
             'encoder': LaunchConfiguration('encoder'),
+            'pixel_format': LaunchConfiguration('pixel_format'),
             'fps': '24',
             'postprocess_file': LaunchConfiguration('ir_postprocess_file')
         }.items()
@@ -81,9 +87,10 @@ def generate_launch_description():
         node_name_arg,
         frame_id_arg,
         encoder_arg,
+        pixel_format_arg,
         postprocess_file_arg,
         ir_postprocess_file_arg,
         rgb_launch,
-        ir_launch,
+        # ir_launch,
         cam_manager_launch,
     ])

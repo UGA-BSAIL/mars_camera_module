@@ -98,7 +98,7 @@ void InitConstantOptions(VideoOptions *out_config) {
 class CameraNode : public rclcpp::Node {
  public:
   explicit CameraNode(const rclcpp::NodeOptions &options)
-      : Node("camera_node", options),
+      : Node("camera", options),
         param_subscriber_(
             std::make_shared<rclcpp::ParameterEventHandler>(this)) {
     // Parameter declarations
@@ -175,12 +175,12 @@ class CameraNode : public rclcpp::Node {
     // Create a publisher for images.
     const auto node_shared = std::shared_ptr<Node>(this);
     image_transport_ = std::make_shared<ImageTransport>(node_shared);
-    image_publisher_ = image_transport_->advertise("image", 1);
+    image_publisher_ = image_transport_->advertise(get_name(), 1);
     // Create a publisher for detections.
     detection_publisher_ =
-        this->create_publisher<FrameDetections>("detections", 10);
+        create_publisher<FrameDetections>("detections", 10);
     // Create a publisher for motion.
-    motion_publisher_ = this->create_publisher<FrameMotion>("motion", 10);
+    motion_publisher_ = create_publisher<FrameMotion>("motion", 10);
 
     // Set up the publisher callbacks.
     camera_ = std::make_unique<CameraMessenger>(

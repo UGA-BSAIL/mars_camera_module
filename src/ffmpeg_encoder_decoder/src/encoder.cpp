@@ -380,14 +380,27 @@ void Encoder::doEncodeImage(const cv::Mat & img, const Header & header, const rc
     t1 = rclcpp::Clock().now();
     totalInBytes_ += img.cols * img.rows;  // raw size!
   }
-  // bend the memory pointers in colorFrame to the right locations
-  av_image_fill_arrays(
-    wrapperFrame_->data, wrapperFrame_->linesize, &(img.data[0]),
-    static_cast<AVPixelFormat>(wrapperFrame_->format), wrapperFrame_->width, wrapperFrame_->height,
-    1 /* alignment, could be better*/);
-  sws_scale(
-    swsContext_, wrapperFrame_->data, wrapperFrame_->linesize, 0,  // src
-    codecContext_->height, frame_->data, frame_->linesize);        // dest
+
+  // Convert color spaces to what the encoder expects. Note that in the original code, this was
+  // done using FFMpeg, which for some reason is *way* slower than doing it using OpenCV, at least
+  // on the RPi.
+  const uint8_t * p = img.data;
+  const int width = img.cols;
+  const int height = img.rows;
+  const AVPixelFormat targetFmt = codecContext_->pix_fmt;
+  if (targetFmt == AV_PIX_FMT_BGR0) {
+    memcpy(frame_->data[0], p, width * height * 3);
+  } else if (targetFmt == AV_PIX_FMT_YUV420P || targetFmt == AV_PIX_FMT_YUVJ420P) {
+    cv::Mat yuv;
+    cv::cvtColor(img, yuv, cv::COLOR_BGR2YUV_I420);
+    const uint8_t *src = yuv.data;
+    memcpy(frame_->data[0], src, width * height);
+    memcpy(frame_->data[1], src + width * height, width * height / 4);
+    memcpy(frame_->data[2], src + width * (height + height / 4), (width * height) / 4);
+  } else {
+    RCLCPP_ERROR_STREAM(logger_, "cannot convert format bgr8 -> " << codecContext_->pix_fmt);
+    return;
+  }
 
   if (measurePerformance_) {
     t2 = rclcpp::Clock().now();
