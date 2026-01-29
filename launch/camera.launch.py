@@ -91,6 +91,6 @@ def generate_launch_description():
         postprocess_file_arg,
         ir_postprocess_file_arg,
         rgb_launch,
-        # ir_launch,
+        ir_launch,
         cam_manager_launch,
     ])
