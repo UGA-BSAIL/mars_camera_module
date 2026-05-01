@@ -121,3 +121,24 @@ RUN bash -c "source /opt/ros/noetic/setup.bash && catkin_make"
 
 # Add scripts to run.
 ADD scripts/extract_videos.py extract_videos.py
+
+#####
+# Container for running rviz.
+#####
+FROM ros:noetic-ros-core AS rviz
+
+RUN apt-get update && apt-get install -y ros-noetic-rviz
+
+# Add the rviz script.
+ADD scripts/rviz.sh rviz.sh
+
+#####
+# Container for running rqt_reconfigure.
+#####
+FROM ros:noetic-ros-core AS reconfigure
+
+RUN apt-get update && apt-get install -y \
+    ros-noetic-dynamic-reconfigure ros-noetic-rqt-reconfigure
+
+# Add the rviz script.
+ADD scripts/rqt_reconfigure.sh rqt_reconfigure.sh
