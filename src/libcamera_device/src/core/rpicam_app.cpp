@@ -296,14 +296,14 @@ void RPiCamApp::configureFrameRate(int32_t duration_offset) {
 }
 
 void RPiCamApp::ReConfigureFromOptions() {
-        if (!camera_) {
-          // Camera isn't opened yet. We can't do anything.
-          return;
-        }
+    if (!camera_) {
+        // Camera isn't opened yet. We can't do anything.
+        return;
+    }
 
-        std::lock_guard<std::mutex> lock(control_mutex_);
+    std::lock_guard<std::mutex> lock(control_mutex_);
 
-        // Build a list of controls based on the currently-set options.
+    // Build a list of controls based on the currently-set options.
 	// We don't overwrite anything the application may have set before calling us.
 	if (!controls_.get(controls::ScalerCrop) && !controls_.get(controls::rpi::ScalerCrops))
 	{
@@ -325,7 +325,7 @@ void RPiCamApp::ReConfigureFromOptions() {
 			crops.push_back(default_crop);
 		}
 
-		LOG(2, "Using crop (main) " << crops.back().toString());
+		LOG(1, "Using crop (main) " << crops.back().toString());
 
 		if (options_->lores_width != 0 && options_->lores_height != 0 && !options_->lores_par)
 		{
@@ -354,8 +354,8 @@ void RPiCamApp::ReConfigureFromOptions() {
 		controls_.set(controls::AfWindows, afwindows_rectangle);
 	}
 
-        // When we set a new frame rate, zero out the offset.
-        configureFrameRate(0);
+    // When we set a new frame rate, zero out the offset.
+    configureFrameRate(0);
 
 	if (!controls_.get(controls::ExposureTime) && options_->shutter)
 		controls_.set(controls::ExposureTime, options_->shutter.get<std::chrono::microseconds>());
@@ -791,7 +791,7 @@ void RPiCamApp::StartCamera()
 	// This makes all the Request objects that we shall need.
 	makeRequests();
 
-        ReConfigureFromOptions();
+    ReConfigureFromOptions();
 
 	if (camera_->start(&controls_))
 		throw std::runtime_error("failed to start camera");

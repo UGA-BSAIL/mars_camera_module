@@ -87,14 +87,16 @@ bool FFMPEGEncoder::openCodec(int width, int height) {
     if (!codecContext_) {
       throw(std::runtime_error("cannot allocate codec context!"));
     }
-    codecContext_->bit_rate = bitRate_;
     if (codecName_ == "mjpeg") {
       // For MJPEG codec, set a fixed quality.
       codecContext_->flags |= AV_CODEC_FLAG_QSCALE;
       codecContext_->global_quality = FF_QP2LAMBDA * qmax_;
+      // Bitrate is not used for MJPEG.
+      codecContext_->bit_rate = 0;
       ROS_INFO_STREAM("Setting global quality to " << qmax_);
     } else {
       // Otherwise, we can use variable quality.
+      codecContext_->bit_rate = bitRate_;
       codecContext_->qmax = qmax_; // 0: highest, 63: worst quality bound
     }
     codecContext_->width = width;
@@ -108,7 +110,7 @@ bool FFMPEGEncoder::openCodec(int width, int height) {
       // number of bidirectional frames (per group?).
       // NVenc can only handle zero!
       codecContext_->max_b_frames = 0;
-   
+
       // encoded pixel format. Must be supported by encoder
       // check with e.g.: ffmpeg -h encoder=h264_nvenc -pix_fmts
       const auto &pixel_format = kPixelFormatForEncoder.find(codecName_);
