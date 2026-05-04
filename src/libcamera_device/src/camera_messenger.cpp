@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "libcamera/formats.h"
 #include "post_processing_stages/hailo/hailo_postprocessing_stage.hpp"
 #include "post_processing_stages/object_detect.hpp"
 
@@ -30,6 +31,7 @@ const auto kStd4 = std::placeholders::_4;
 const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
     {libcamera::formats::YUV422, sensor_msgs::image_encodings::YUV422},
     {libcamera::formats::RGB888, sensor_msgs::image_encodings::BGR8},
+    {libcamera::formats::SRGGB16, sensor_msgs::image_encodings::BAYER_RGGB16},
 };
 
 // Timeout to use when waiting for a frame before we consider the camera
@@ -332,6 +334,10 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->mode = new_options.mode;
   options->width = new_options.width;
   options->height = new_options.height;
+  options->roi_x = 0;
+  options->roi_y = 0;
+  options->roi_width = 0;
+  options->roi_height = 0;
   options->camera = new_options.camera;
   options->afMode_index = new_options.afMode_index;
   options->afWindow_x = new_options.afWindow_x;
@@ -341,6 +347,9 @@ void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
   options->post_process_libs = new_options.post_process_libs;
   options->post_process_file = new_options.post_process_file;
   options->transform = new_options.transform;
+  // Note: need to force the raw stream to off, otherwise it causes weird
+  // resolution issues with the video output.
+  options->no_raw = true;
 
   // Apply the new configuration.
   camera_app_->ReConfigureFromOptions();

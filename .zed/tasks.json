@@ -4,5 +4,17 @@
         "command": "bash",
         "args": ["./scripts/zed_catkin_make.sh"],
         "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "Copy to camera",
+        "command": "rsync -avP src bsail@192.168.1.18:camera_catkin_ws/",
+        "use_new_terminal": false,
+        "reveal": "always",
+        "reveal_target": "dock",
+        "hide": "never",
+        "shell": "system",
+        "show_summary": true,
+        "show_command": true,
+        "cwd": "$ZED_WORKTREE_ROOT"
     }
 ]
