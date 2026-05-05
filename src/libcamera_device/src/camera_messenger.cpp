@@ -139,6 +139,7 @@ void CameraMessenger::TranslateDetections(
     ros_detection.height =
         static_cast<float>(detection.box.height) / kFrameHeight;
     ros_detection.confidence = detection.confidence;
+    ros_detection.class_id = detection.category;
 
     detections_message.detections.push_back(ros_detection);
   }
