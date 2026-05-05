@@ -16,6 +16,8 @@ services:
             - dev
         volumes:
             - .:/home/ros/ros_libcamera
+            # Allow us to use existing SSH keys when copying to the robot.
+            - ~/.ssh/id_rsa:/home/ros/.ssh/id_rsa
 
     ros:
         # Docker container for running ros.

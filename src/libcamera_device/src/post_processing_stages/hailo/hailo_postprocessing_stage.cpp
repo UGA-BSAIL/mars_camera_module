@@ -133,17 +133,17 @@ int HailoPostProcessingStage::configureHailoRT()
 	infer_model_->set_hw_latency_measurement_flags(HAILO_LATENCY_MEASURE);
 
 	// Configure the infer model
-        // Make sure the appearance features are output as floats instead of
-        // quantized ints.
-        for (const auto &output : infer_model_->outputs()) {
-          if (!output.is_nms()) {
-            ROS_INFO_STREAM("Configuring output " << output.name()
-                                                  << " to float32.");
-            auto mutable_output = infer_model_->output(output.name()).release();
-            mutable_output.set_format_type(HAILO_FORMAT_TYPE_FLOAT32);
-          }
+    // Make sure the appearance features are output as floats instead of
+    // quantized ints.
+    for (const auto &output : infer_model_->outputs()) {
+        if (!output.is_nms()) {
+        ROS_INFO_STREAM("Configuring output " << output.name()
+                                                << " to float32.");
+        auto mutable_output = infer_model_->output(output.name()).release();
+        mutable_output.set_format_type(HAILO_FORMAT_TYPE_FLOAT32);
         }
-        Expected<ConfiguredInferModel> configured_infer_model_exp = infer_model_->configure();
+    }
+    Expected<ConfiguredInferModel> configured_infer_model_exp = infer_model_->configure();
 	if (!configured_infer_model_exp)
 	{
           ROS_ERROR_STREAM("Failed to create configured infer model, status = "
