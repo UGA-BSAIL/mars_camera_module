@@ -61,6 +61,32 @@ void ExtractOutputTensorData(const OutTensor &out_tensor,
   std::copy_n(out_tensor.data.get(), kTotalSize, data.begin());
 }
 
+/**
+ * Rotates an RGB888 frame by 90 degrees clockwise.
+ * @param src Pointer to source frame data.
+ * @param dst Pointer to destination frame data.
+ * @param width Source frame width.
+ * @param height Source frame height.
+ */
+void RotateRgbFrame90Clockwise(const uint8_t *src, uint8_t *dst,
+                               unsigned int width, unsigned int height) {
+  const unsigned int kChannels = 3;
+  const unsigned int dst_width = height;
+
+  for (unsigned int y = 0; y < height; ++y) {
+    for (unsigned int x = 0; x < width; ++x) {
+      const unsigned int src_index = (y * width + x) * kChannels;
+      const unsigned int dst_x = height - 1 - y;
+      const unsigned int dst_y = x;
+      const unsigned int dst_index = (dst_y * dst_width + dst_x) * kChannels;
+
+      dst[dst_index] = src[src_index];
+      dst[dst_index + 1] = src[src_index + 1];
+      dst[dst_index + 2] = src[src_index + 2];
+    }
+  }
+}
+
 }  // namespace
 
 YoloInference::YoloInference(RPiCamApp *app)
@@ -117,8 +143,9 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
     return false;
   }
 
-  if (low_res_info_.width != InputTensorSize().width ||
-      low_res_info_.height != InputTensorSize().height) {
+  // Expect input to be rotated 90 degrees.
+  if (low_res_info_.height != InputTensorSize().width ||
+      low_res_info_.width != InputTensorSize().height) {
     ROS_ERROR_STREAM("Wrong low res size, expecting "
                      << InputTensorSize().toString());
     return false;
@@ -173,9 +200,19 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
     scaler_crops.push_back(*scaler_crop);
   }
 
+  StreamInfo rotated_info;
+  rotated_info.width = low_res_info_.height;
+  rotated_info.height = low_res_info_.width;
+  rotated_info.stride = rotated_info.width * 3;
+
+  auto rotated_input =
+      allocator_.Allocate(rotated_info.stride * rotated_info.height);
+  RotateRgbFrame90Clockwise(input_ptr, rotated_input.get(), low_res_info_.width,
+                            low_res_info_.height);
+
   std::vector<OutTensor> output_tensors;
   std::vector<Detection> objects =
-      runInference(input_ptr, scaler_crops, output_tensors);
+      runInference(rotated_input.get(), scaler_crops, output_tensors);
   if (objects.size()) {
     if (temporal_filtering_) {
       // Process() can be concurrently called through different threads for
@@ -275,7 +312,7 @@ std::vector<Detection> YoloInference::runInference(
     const float y0 = std::max(box.ymin(), 0.0f);
     const float y1 = std::min(box.ymax(), 1.0f);
     libcamera::Rectangle r =
-        ConvertInferenceCoordinates({x0, y0, x1 - x0, y1 - y0}, scaler_crops);
+        ConvertInferenceCoordinates({y0, x0, y1 - y0, x1 - x0}, scaler_crops);
     results.emplace_back(d->get_class_id(), d->get_label(), d->get_confidence(),
                          r.x, r.y, r.width, r.height);
 

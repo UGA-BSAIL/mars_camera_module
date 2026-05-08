@@ -7,7 +7,7 @@
     },
     {
         "label": "Copy to camera",
-        "command": "rsync -avP src launch scripts bsail@10.138.187.150:camera_catkin_ws/",
+        "command": "rsync -avP src bsail@192.168.1.20:camera_catkin_ws/",
         "use_new_terminal": false,
         "reveal": "always",
         "reveal_target": "dock",

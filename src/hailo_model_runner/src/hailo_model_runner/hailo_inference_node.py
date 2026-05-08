@@ -3,22 +3,22 @@ Handles performing model inference on the HAILO device. It reads the raw images 
 and outputs the bounding boxes to a topic.
 """
 
-from pathlib import Path
-from queue import Queue, Full, Empty
 import threading
-from typing import Tuple
 import time
+from pathlib import Path
+from queue import Empty, Full, Queue
+from typing import Tuple
 
 import cv2
+import numpy as np
 import rospy
+from rospy.numpy_msg import numpy_msg
 from sensor_msgs.msg import Image
 from std_msgs.msg import Header
-from rospy.numpy_msg import numpy_msg
 
-import numpy as np
+from libcamera_device.msg import Detection, FrameDetections
 
 from .utils import HailoAsyncInference
-from libcamera_device.msg import Detection, FrameDetections
 
 
 class HailoInferenceManager:
@@ -153,8 +153,10 @@ class HailoInferenceManager:
 
         header = image.header
         image = self.__img_to_numpy(image)
-        # Downsample by half. We do it in this simplistic way to save CPU time.
-        image = image[::2, ::2, :]
+        if image.shape[0] > image.shape[1]:
+            # Un-rotate rotated stereo image.
+            image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        image = cv2.resize(image, (960, 540))
 
         # Write it to the input queue.
         try:
@@ -199,8 +201,8 @@ class HailoInferenceManager:
 
         # Convert to a ROS message.
         self.__log_stats_periodically(header)
-        boxes = inference_results[self.__box_output_name][0][0]
-        appearance_features = inference_results[self.__feature_output_name][0]
+        boxes = np.concatenate(inference_results[self.__box_output_name], axis=0)
+        appearance_features = inference_results[self.__feature_output_name]
 
         confidences = boxes[:, -1]
         boxes = boxes[:, :-1]
@@ -221,6 +223,7 @@ class HailoInferenceManager:
                 )
             )
 
+        print(appearance_features.shape)
         frame_detections = FrameDetections(
             header=header,
             detections=detections,

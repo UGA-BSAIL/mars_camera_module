@@ -2,16 +2,17 @@
 # https://github.com/hailo-ai/Hailo-Application-Code-Examples/blob/main/runtime/hailo-8/python/utils.py:w
 
 
-from typing import List, Generator, Optional, Tuple, Dict
-from pathlib import Path
-from functools import partial
 import queue
-import numpy as np
-from hailo_platform import HEF, VDevice, FormatType, HailoSchedulingAlgorithm
-import rospy
-from std_msgs.msg import Header
+from functools import partial
+from pathlib import Path
+from typing import Dict, Generator, List, Optional, Tuple
+
 import cv2
+import numpy as np
+import rospy
+from hailo_platform import HEF, FormatType, HailoSchedulingAlgorithm, VDevice
 from PIL import Image
+from std_msgs.msg import Header
 
 IMAGE_EXTENSIONS: Tuple[str, ...] = (".jpg", ".png", ".bmp", ".jpeg")
 
@@ -115,7 +116,7 @@ class HailoAsyncInference:
                     result = bindings.output().get_buffer()
                 else:
                     result = {
-                        name: np.expand_dims(bindings.output(name).get_buffer(), axis=0)
+                        name: bindings.output(name).get_buffer()
                         for name in bindings._output_names
                     }
 

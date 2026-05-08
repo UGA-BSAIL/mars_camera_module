@@ -150,10 +150,12 @@ void CameraMessenger::TranslateDetections(
   const auto kFrameHeight = static_cast<float>(stream_info_.height);
   for (const auto &detection : detections) {
     Detection ros_detection;
-    ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
-    ros_detection.center_y = static_cast<float>(detection.box.y) / kFrameHeight;
-    ros_detection.width = static_cast<float>(detection.box.width) / kFrameWidth;
-    ros_detection.height =
+    ros_detection.center_y = static_cast<float>(detection.box.x) / kFrameWidth;
+    ros_detection.center_x = static_cast<float>(detection.box.y) / kFrameHeight;
+    ros_detection.center_x = 1.0 - ros_detection.center_x;
+    ros_detection.center_y = 1.0 - ros_detection.center_y;
+    ros_detection.height = static_cast<float>(detection.box.width) / kFrameWidth;
+    ros_detection.width =
         static_cast<float>(detection.box.height) / kFrameHeight;
     ros_detection.confidence = detection.confidence;
     ros_detection.class_id = detection.category;
