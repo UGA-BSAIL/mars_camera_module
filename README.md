@@ -38,11 +38,6 @@ the following section to `~/.config/zed/settings.json`:
       "projects": [
         {
           "paths": [
-            "/home/ros"
-          ]
-        },
-        {
-          "paths": [
             "/home/ros/ros_libcamera"
           ]
         }
