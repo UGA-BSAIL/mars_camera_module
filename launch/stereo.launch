@@ -17,8 +17,8 @@
         <arg name="quality" value="4"/>
         <arg name="encoder" value="$(arg encoder)" />
         <!-- Flip the width and height since the cameras are rotated. -->
-        <arg name="width" value="1088"/>
-        <arg name="height" value="1920"/>
+        <arg name="width" value="1440"/>
+        <arg name="height" value="2560"/>
         <arg name="fps" value="24" />
         <arg name="postprocess_file" value="$(arg postprocess_file)" />
     </include>
@@ -30,8 +30,8 @@
         <arg name="quality" value="4"/>
         <arg name="encoder" value="$(arg encoder)" />
         <!-- Flip the width and height since the cameras are rotated. -->
-        <arg name="width" value="1088"/>
-        <arg name="height" value="1920"/>
+        <arg name="width" value="1440"/>
+        <arg name="height" value="2560"/>
         <arg name="fps" value="24" />
         <!-- For now, we only run AI phenotyping on the left head. -->
         <arg name="postprocess_file" value="" />
