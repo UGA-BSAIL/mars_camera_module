@@ -6,6 +6,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <limits>
@@ -108,8 +109,25 @@ void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
   // I don't get why people still use void pointers in the Year of Our Lord
   // 2022...
   const uint8_t* byte_buffer = static_cast<uint8_t*>(buffer);
-  // Copy raw image data.
-  message.data.assign(byte_buffer, byte_buffer + buffer_size);
+
+  // Copy the raw image data
+  const auto kExpectedStride = stream_info_.width * 3;
+  if ((stream_info_.pixel_format == libcamera::formats::RGB888 ||
+       stream_info_.pixel_format == libcamera::formats::BGR888) &&
+      stream_info_.stride != kExpectedStride) {
+    // If we have padding on the right edge of the buffer, we must copy it
+    // without padding.
+    message.data.resize(kExpectedStride * stream_info_.height);
+    for (uint32_t i = 0; i < stream_info_.height; ++i) {
+      std::copy_n(byte_buffer + i * stream_info_.stride, kExpectedStride,
+                  message.data.data() + i * kExpectedStride);
+    }
+
+    message.step = kExpectedStride;
+  } else {
+    // If there is no padding, we can do it in a single copy.
+    message.data.assign(byte_buffer, byte_buffer + buffer_size);
+  }
 
   // WaitForFrame the callback with the new message.
   on_message_ready_(message);
