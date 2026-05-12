@@ -70,12 +70,12 @@ uint64_t KernelToRosClock(uint32_t timestamp_us) {
 
 }  // namespace
 
-CameraMessenger::CameraMessenger(std::unique_ptr<RPiCamEncoder> &&camera_app,
+CameraMessenger::CameraMessenger(std::unique_ptr<RPiCamEncoder>&& camera_app,
                                  std::string frame_id,
-                                 const VideoOptions &options)
+                                 const VideoOptions& options)
     : camera_app_(std::move(camera_app)),
       frame_id_(std::move(frame_id)),
-      on_message_ready_([](const sensor_msgs::Image &) {
+      on_message_ready_([](const sensor_msgs::Image&) {
         // Default callback does nothing, but logs a warning.
         ROS_WARN_STREAM("Got a camera message, but no callback is registered.");
       }) {
@@ -87,7 +87,7 @@ CameraMessenger::~CameraMessenger() {
   Stop();
 }
 
-void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
+void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
                                        int64_t timestamp_us, uint32_t) {
   if (!on_message_ready_) {
     // Don't bother with the translation if we don't have a callback.
@@ -107,7 +107,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
 
   // I don't get why people still use void pointers in the Year of Our Lord
   // 2022...
-  const uint8_t *byte_buffer = static_cast<uint8_t *>(buffer);
+  const uint8_t* byte_buffer = static_cast<uint8_t*>(buffer);
   // Copy raw image data.
   message.data.assign(byte_buffer, byte_buffer + buffer_size);
 
@@ -116,7 +116,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
 }
 
 void CameraMessenger::TranslateDetections(
-    const CompletedRequestPtr &completed_request) {
+    const CompletedRequestPtr& completed_request) {
   FrameDetections detections_message;
 
   FillHeaderFromMeta(&detections_message.header, completed_request,
@@ -129,16 +129,23 @@ void CameraMessenger::TranslateDetections(
   // It's normal for the "object_detect.results" tag to not be set if we don't
   // have any detections.
 
-  const auto kFrameWidth = static_cast<float>(stream_info_.width);
-  const auto kFrameHeight = static_cast<float>(stream_info_.height);
-  for (const auto &detection : detections) {
+  bool is_rotated = false;
+  completed_request->post_process_metadata.Get("object_detect.rotated",
+                                               is_rotated);
+  const auto kFrameWidth = static_cast<float>(
+      !is_rotated ? stream_info_.width : stream_info_.height);
+  const auto kFrameHeight = static_cast<float>(
+      !is_rotated ? stream_info_.height : stream_info_.width);
+  for (const auto& detection : detections) {
     Detection ros_detection;
-    ros_detection.center_y = static_cast<float>(detection.box.x) / kFrameWidth;
-    ros_detection.center_x = static_cast<float>(detection.box.y) / kFrameHeight;
-    ros_detection.center_x = 1.0 - ros_detection.center_x;
-    ros_detection.center_y = 1.0 - ros_detection.center_y;
-    ros_detection.height = static_cast<float>(detection.box.width) / kFrameWidth;
-    ros_detection.width =
+    ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
+    ros_detection.center_y = static_cast<float>(detection.box.y) / kFrameHeight;
+    if (is_rotated) {
+      ros_detection.center_x = 1.0 - ros_detection.center_x;
+      ros_detection.center_y = 1.0 - ros_detection.center_y;
+    }
+    ros_detection.width = static_cast<float>(detection.box.width) / kFrameWidth;
+    ros_detection.height =
         static_cast<float>(detection.box.height) / kFrameHeight;
     ros_detection.confidence = detection.confidence;
     ros_detection.class_id = detection.category;
@@ -175,7 +182,7 @@ void CameraMessenger::TranslateDetections(
 }
 
 void CameraMessenger::TranslateMotion(
-    const CompletedRequestPtr &completed_request) {
+    const CompletedRequestPtr& completed_request) {
   uint32_t regions_with_motion;
   if (completed_request->post_process_metadata.Get(
           "motion_detect.regions_above_threshold", regions_with_motion)) {
@@ -197,19 +204,19 @@ void CameraMessenger::TranslateMotion(
 }
 
 void CameraMessenger::SetMessageReadyCallback(
-    const ImageReadyCallback &callback) {
+    const ImageReadyCallback& callback) {
   ROS_DEBUG_STREAM("Setting new callback for camera messages.");
   on_message_ready_ = callback;
 }
 
 void CameraMessenger::SetDetectionsReadyCallback(
-    const DetectionsReadyCallback &callback) {
+    const DetectionsReadyCallback& callback) {
   ROS_DEBUG_STREAM("Setting new callback for detections.");
   on_detections_ready_ = callback;
 }
 
 void CameraMessenger::SetMotionReadyCallback(
-    const MotionReadyCallback &callback) {
+    const MotionReadyCallback& callback) {
   ROS_DEBUG_STREAM("Setting new callback for motion.");
   on_motion_ready_ = callback;
 }
@@ -276,7 +283,7 @@ bool CameraMessenger::WaitForFrame() {
                             << static_cast<uint32_t>(message.type)
                             << " from LibCamera!");
 
-  auto &completed_request = std::get<CompletedRequestPtr>(message.payload);
+  auto& completed_request = std::get<CompletedRequestPtr>(message.payload);
   camera_app_->EncodeBuffer(completed_request, camera_app_->VideoStream());
   TranslateDetections(completed_request);
   TranslateMotion(completed_request);
@@ -294,7 +301,7 @@ void CameraMessenger::UpdateStreamInfo() {
                                             << ", which is not supported.");
   ros_pixel_format_ = encoding->second;
 }
-void CameraMessenger::FillHeader(std_msgs::Header *header,
+void CameraMessenger::FillHeader(std_msgs::Header* header,
                                  uint32_t timestamp_us,
                                  uint32_t sequence_num) const {
   // Sensor timestamps are from the kernel clock, but we want them relative to
@@ -307,7 +314,7 @@ void CameraMessenger::FillHeader(std_msgs::Header *header,
 }
 
 void CameraMessenger::FillHeaderFromMeta(
-    std_msgs::Header *header, const CompletedRequestPtr &completed_request,
+    std_msgs::Header* header, const CompletedRequestPtr& completed_request,
     uint32_t sequence_num) const {
   // Sensor timestamps are from the kernel clock, but we want them relative to
   // the wall clock.
@@ -321,9 +328,9 @@ void CameraMessenger::FillHeaderFromMeta(
   }
 }
 
-void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) {
+void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) {
   // Copy the specified options to the camera app.
-  auto *options = camera_app_->GetOptions();
+  auto* options = camera_app_->GetOptions();
 
   options->nopreview = new_options.nopreview;
   options->denoise = new_options.denoise;

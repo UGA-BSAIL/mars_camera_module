@@ -17,10 +17,12 @@
 #include <string>
 #include <unordered_map>
 
+#include "libcamera/geometry.h"
+
 using Size = libcamera::Size;
-using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams *);
-using InitFuncPtr = YoloParams *(*)(std::string, std::string);
-using FreeFuncPtr = void (*)(void *);
+using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams*);
+using InitFuncPtr = YoloParams* (*)(std::string, std::string);
+using FreeFuncPtr = void (*)(void*);
 using Detection = postproc::Detection;
 
 using Rectangle = libcamera::Rectangle;
@@ -45,8 +47,8 @@ const std::unordered_map<hailo_format_type_t, uint8_t> kHailoTypeSizes{
  * @param out_tensor The output tensor.
  * @param data The raw data to extract.
  */
-void ExtractOutputTensorData(const OutTensor &out_tensor,
-                             std::vector<uint8_t> &data) {
+void ExtractOutputTensorData(const OutTensor& out_tensor,
+                             std::vector<uint8_t>& data) {
   // Compute the size.
   const auto kDataSize = kHailoTypeSizes.find(out_tensor.format.type);
   if (kDataSize == kHailoTypeSizes.end()) {
@@ -68,7 +70,7 @@ void ExtractOutputTensorData(const OutTensor &out_tensor,
  * @param width Source frame width.
  * @param height Source frame height.
  */
-void RotateRgbFrame90Clockwise(const uint8_t *src, uint8_t *dst,
+void RotateRgbFrame90Clockwise(const uint8_t* src, uint8_t* dst,
                                unsigned int width, unsigned int height) {
   const unsigned int kChannels = 3;
   const unsigned int dst_width = height;
@@ -89,7 +91,7 @@ void RotateRgbFrame90Clockwise(const uint8_t *src, uint8_t *dst,
 
 }  // namespace
 
-YoloInference::YoloInference(RPiCamApp *app)
+YoloInference::YoloInference(RPiCamApp* app)
     : HailoPostProcessingStage(app),
       postproc_nms_(PostProcLibDir(POSTPROC_LIB_NMS)) {}
 
@@ -101,11 +103,12 @@ YoloInference::~YoloInference() {
   }
 }
 
-char const *YoloInference::Name() const { return NAME; }
+char const* YoloInference::Name() const { return NAME; }
 
-void YoloInference::Read(boost::property_tree::ptree const &params) {
+void YoloInference::Read(boost::property_tree::ptree const& params) {
   max_detections_ = params.get<unsigned int>("max_detections");
   threshold_ = params.get<float>("threshold", 0.5f);
+  rotate_ = params.get<bool>("rotate", false);
 
   if (params.find("temporal_filter") != params.not_found()) {
     temporal_filtering_ = true;
@@ -115,8 +118,9 @@ void YoloInference::Read(boost::property_tree::ptree const &params) {
         params.get<unsigned int>("temporal_filter.visible_frames", 5);
     hidden_frames_ =
         params.get<unsigned int>("temporal_filter.hidden_frames", 2);
-  } else
+  } else {
     temporal_filtering_ = false;
+  }
 
   InitFuncPtr init =
       reinterpret_cast<InitFuncPtr>(postproc_nms_.GetSymbol("init"));
@@ -135,17 +139,21 @@ void YoloInference::Read(boost::property_tree::ptree const &params) {
 
 void YoloInference::Configure() {
   HailoPostProcessingStage::Configure();
+  rotated_input_ = nullptr;
 }
 
-bool YoloInference::Process(CompletedRequestPtr &completed_request) {
+bool YoloInference::Process(CompletedRequestPtr& completed_request) {
   if (!HailoPostProcessingStage::Ready()) {
     ROS_ERROR_STREAM("HailoRT not ready!");
     return false;
   }
 
-  // Expect input to be rotated 90 degrees.
-  if (low_res_info_.height != InputTensorSize().width ||
-      low_res_info_.width != InputTensorSize().height) {
+  const auto kFrameWidth =
+      !rotate_ ? low_res_info_.width : low_res_info_.height;
+  const auto kFrameHeight =
+      !rotate_ ? low_res_info_.height : low_res_info_.width;
+  if (kFrameWidth != InputTensorSize().width ||
+      kFrameHeight != InputTensorSize().height) {
     ROS_ERROR_STREAM("Wrong low res size, expecting "
                      << InputTensorSize().toString());
     return false;
@@ -154,7 +162,7 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
   BufferReadSync r(app_, completed_request->buffers[low_res_stream_]);
   libcamera::Span<uint8_t> buffer = r.Get()[0];
   std::shared_ptr<uint8_t> input;
-  uint8_t *input_ptr;
+  uint8_t* input_ptr;
 
   if (low_res_info_.pixel_format == libcamera::formats::YUV420) {
     StreamInfo rgb_info;
@@ -200,19 +208,29 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
     scaler_crops.push_back(*scaler_crop);
   }
 
-  StreamInfo rotated_info;
-  rotated_info.width = low_res_info_.height;
-  rotated_info.height = low_res_info_.width;
-  rotated_info.stride = rotated_info.width * 3;
+  // Apply rotation if requested.
+  const uint8_t* kRotatedInputRaw = input_ptr;
+  if (rotate_) {
+    StreamInfo rotated_info;
+    rotated_info.width = low_res_info_.height;
+    rotated_info.height = low_res_info_.width;
+    rotated_info.stride = rotated_info.width * 3;
+    const auto kRotatedInputSize = rotated_info.stride * rotated_info.height;
 
-  auto rotated_input =
-      allocator_.Allocate(rotated_info.stride * rotated_info.height);
-  RotateRgbFrame90Clockwise(input_ptr, rotated_input.get(), low_res_info_.width,
-                            low_res_info_.height);
+    if (!rotated_input_ || rotated_input_size_ != kRotatedInputSize) {
+      // We need to reallocate the buffer, either because it wasn't allocated
+      // yet or because the size of the frame changed.
+      rotated_input_size_ = kRotatedInputSize;
+      rotated_input_ = allocator_.Allocate(rotated_input_size_);
+    }
+    RotateRgbFrame90Clockwise(input_ptr, rotated_input_.get(),
+                              low_res_info_.width, low_res_info_.height);
+    kRotatedInputRaw = rotated_input_.get();
+  }
 
   std::vector<OutTensor> output_tensors;
   std::vector<Detection> objects =
-      runInference(rotated_input.get(), scaler_crops, output_tensors);
+      runInference(kRotatedInputRaw, scaler_crops, output_tensors);
   if (objects.size()) {
     if (temporal_filtering_) {
       // Process() can be concurrently called through different threads for
@@ -223,7 +241,7 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
       filterOutputObjects(objects);
       if (lt_objects_.size()) {
         objects.clear();
-        for (auto const &obj : lt_objects_) {
+        for (auto const& obj : lt_objects_) {
           if (!obj.hidden) objects.push_back(obj.params);
         }
       }
@@ -235,7 +253,7 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
   }
 
   // Save the appearance features as well.
-  for (const auto &output : output_tensors) {
+  for (const auto& output : output_tensors) {
     if (!hailort::HailoRTCommon::is_nms(output.format.order)) {
       // This is the appearance feature.
       std::vector<uint8_t> output_data;
@@ -246,12 +264,16 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
           "object_detect.features_shape", output.shape);
     }
   }
+  // Mark if this is from a rotated frame so we can normalize the detections
+  // correctly.
+  completed_request->post_process_metadata.Set("object_detect.rotated",
+                                               rotate_);
 
   return false;
 }
 
-bool YoloInference::runHailoJob(const uint8_t *frame,
-                                std::vector<OutTensor> &output_tensors) {
+bool YoloInference::runHailoJob(const uint8_t* frame,
+                                std::vector<OutTensor>& output_tensors) {
   hailort::AsyncInferJob job;
   hailo_status status;
 
@@ -277,8 +299,8 @@ bool YoloInference::runHailoJob(const uint8_t *frame,
 }
 
 std::vector<Detection> YoloInference::runInference(
-    const uint8_t *frame, const std::vector<Rectangle> &scaler_crops,
-    std::vector<OutTensor> &output_tensors) {
+    const uint8_t* frame, const std::vector<Rectangle>& scaler_crops,
+    std::vector<OutTensor>& output_tensors) {
   if (!runHailoJob(frame, output_tensors)) {
     return {};
   }
@@ -286,7 +308,7 @@ std::vector<Detection> YoloInference::runInference(
   // Only do this post-processing for box outputs. Auxiliary outputs will not
   // be touched.
   std::vector<OutTensor> box_output_tensors;
-  for (auto &t : output_tensors) {
+  for (auto& t : output_tensors) {
     if (hailort::HailoRTCommon::is_nms(t.format.order)) {
       box_output_tensors.push_back(t);
     }
@@ -302,17 +324,21 @@ std::vector<Detection> YoloInference::runInference(
 
   // Translate results to the rpicam-apps Detection objects
   std::vector<Detection> results;
-  for (auto const &d : detections) {
+  for (auto const& d : detections) {
     if (d->get_confidence() < threshold_) continue;
 
     // Extract bounding box co-ordinates in the output image co-ordinates.
-    auto const &box = d->get_bbox();
+    auto const& box = d->get_bbox();
     const float x0 = std::max(box.xmin(), 0.0f);
     const float x1 = std::min(box.xmax(), 1.0f);
     const float y0 = std::max(box.ymin(), 0.0f);
     const float y1 = std::min(box.ymax(), 1.0f);
-    libcamera::Rectangle r =
-        ConvertInferenceCoordinates({y0, x0, y1 - y0, x1 - x0}, scaler_crops);
+    libcamera::Rectangle r;
+    if (rotate_) {
+      r = ConvertInferenceCoordinates({y0, x0, y1 - y0, x1 - x0}, scaler_crops);
+    } else {
+      r = ConvertInferenceCoordinates({x0, y0, x1 - x0, y1 - y0}, scaler_crops);
+    }
     results.emplace_back(d->get_class_id(), d->get_label(), d->get_confidence(),
                          r.x, r.y, r.width, r.height);
 
@@ -322,14 +348,14 @@ std::vector<Detection> YoloInference::runInference(
   return results;
 }
 
-void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
+void YoloInference::filterOutputObjects(std::vector<Detection>& objects) {
   const Size isp_output_size = output_stream_->configuration().size;
 
-  for (auto &lt_obj : lt_objects_) lt_obj.matched = false;
+  for (auto& lt_obj : lt_objects_) lt_obj.matched = false;
 
-  for (auto const &object : objects) {
+  for (auto const& object : objects) {
     bool matched = false;
-    for (auto &lt_obj : lt_objects_) {
+    for (auto& lt_obj : lt_objects_) {
       // Try and match a detected object in our long term list.
       if (object.category == lt_obj.params.category &&
           std::abs(object.box.x - lt_obj.params.box.x) <
@@ -365,7 +391,7 @@ void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
       lt_objects_.push_back({object, visible_frames_, hidden_frames_, 1});
   }
 
-  for (auto &lt_obj : lt_objects_) {
+  for (auto& lt_obj : lt_objects_) {
     if (!lt_obj.matched) {
       // If a non matched object in the long term list is still hidden, set
       // visible count to 0 so that it must be matched for hidden_frames_
@@ -380,13 +406,13 @@ void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
 
   // Remove now invisible objects from the long term list.
   lt_objects_.erase(std::remove_if(lt_objects_.begin(), lt_objects_.end(),
-                                   [](const LtObject &obj) {
+                                   [](const LtObject& obj) {
                                      return !obj.matched && !obj.visible;
                                    }),
                     lt_objects_.end());
 }
 
-static PostProcessingStage *Create(RPiCamApp *app) {
+static PostProcessingStage* Create(RPiCamApp* app) {
   return new YoloInference(app);
 }
 
