@@ -19,6 +19,7 @@
 #include "camera_messenger.hpp"
 #include "core/rpicam_encoder.hpp"
 #include "core/video_options.hpp"
+#include "ros/console.h"
 
 using dynamic_reconfigure::Server;
 using image_transport::ImageTransport;
@@ -33,7 +34,10 @@ const auto kStd1 = std::placeholders::_1;
 const auto kStd2 = std::placeholders::_2;
 
 struct StaticConfig {
+  /// ID of the camera device.
   int32_t device_id;
+  /// Whether to enable automatic mode selection for the camera.
+  bool auto_mode_select;
 };
 
 /// Maps transform enum values to Libcamera transforms.
@@ -48,18 +52,19 @@ std::unordered_map<std::string, libcamera::Transform> kTransformMap{
  * @param header_publisher A separate publisher for just the image header.
  * @param image The image message to publish.
  */
-void PublishEncoded(ImagePublisher* image_publisher,
-                    ros::Publisher* header_publisher, const Image& image) {
+void PublishEncoded(const ImagePublisher* image_publisher,
+                    const ros::Publisher* header_publisher,
+                    const Image& image) {
   image_publisher->publish(image);
   header_publisher->publish(image.header);
 }
 
 /**
- * Publishes camera detections. This is meant to be used as a callback.
+ * @brief Publishes camera detections. This is meant to be used as a callback.
  * @param publisher Will be used for publishing detections.
  * @param detections The detections to publish.
  */
-void PublishDetections(ros::Publisher* publisher,
+void PublishDetections(const ros::Publisher* publisher,
                        const libcamera_device::FrameDetections& detections) {
   publisher->publish(detections);
 }
@@ -86,7 +91,8 @@ void ParamToVideoConfig(const StaticConfig static_config,
                         VideoOptions* out_config) {
   out_config->framerate = static_cast<float>(dynamic_config.fps);
   out_config->mode =
-      Mode(dynamic_config.width, dynamic_config.height, 24, false);
+      Mode(dynamic_config.width, dynamic_config.height, 10, false);
+  out_config->mode.framerate = dynamic_config.fps;
   out_config->width = dynamic_config.width;
   out_config->height = dynamic_config.height;
 
@@ -117,6 +123,11 @@ void ParamToVideoConfig(const StaticConfig static_config,
 
   out_config->post_process_file = dynamic_config.postprocess_file;
 
+  // Disabling the raw stream will force it to not auto-select the sensor mode.
+  out_config->no_raw = !static_config.auto_mode_select;
+  ROS_WARN_STREAM_COND(!static_config.auto_mode_select,
+                       "Disabling automatic mode selection for sensor!");
+
   // Configure transformation.
   out_config->transform = libcamera::Transform::Identity;
   if (const auto kTransform = kTransformMap.find(dynamic_config.transform);
@@ -142,7 +153,6 @@ void ReconfigureParams(CameraMessenger* messenger,
   // Set the new parameters.
   VideoOptions camera_options;
   ParamToVideoConfig(static_config, dynamic_config, &camera_options);
-
 
   if (level & 0x8) {
     // Restart the camera.
@@ -174,9 +184,9 @@ void ReconfigureParams(CameraMessenger* messenger,
  * @param node The node handle.
  * @param camera The camera itself.
  */
-void WaitForSubscriber(ImagePublisher& image_publisher,
-                       ros::Publisher& detection_publisher,
-                       ros::Publisher& motion_publisher,
+void WaitForSubscriber(const ImagePublisher& image_publisher,
+                       const ros::Publisher& detection_publisher,
+                       const ros::Publisher& motion_publisher,
                        const ros::NodeHandle& node, CameraMessenger* camera) {
   if (image_publisher.getNumSubscribers() > 0 ||
       detection_publisher.getNumSubscribers() > 0 ||
@@ -211,8 +221,10 @@ int main(int argc, char** argv) {
   // Read parameters.
   std::string camera_name, frame_id;
   int32_t device_id;
+  bool mode_select;
   node.param<std::string>("frame_id", frame_id, "frame");
   node.param<int32_t>("device_id", device_id, 0);
+  node.param<bool>("enable_mode_select", mode_select, true);
 
   ROS_INFO_STREAM("Starting camera node for device "
                   << device_id << " and frame " << frame_id << "...");
@@ -234,7 +246,7 @@ int main(int argc, char** argv) {
   Server<LibcameraDeviceConfig> param_server;
 
   // Set the default configuration initially.
-  const StaticConfig kStaticConfig = {device_id};
+  const StaticConfig kStaticConfig = {device_id, mode_select};
   LibcameraDeviceConfig default_dynamic_config;
   VideoOptions default_video_options;
   param_server.getConfigDefault(default_dynamic_config);

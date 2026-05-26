@@ -5,18 +5,16 @@
 This script handles deployment and management of the camera code.
 """
 
-
-from functools import cache, partial
 import os
 import signal
 import sys
+from functools import cache, partial
 from typing import Any
 
 import confuse
-from loguru import logger
-from netifaces import interfaces, AF_INET, ifaddresses
 import roslaunch
-
+from loguru import logger
+from netifaces import AF_INET, ifaddresses, interfaces
 
 ROS_INTERFACE_NAME = "eth0"
 """
@@ -37,9 +35,9 @@ def _get_local_ip() -> str:
         The IP address of this module.
 
     """
-    assert (
-        ROS_INTERFACE_NAME in interfaces()
-    ), f"{ROS_INTERFACE_NAME} is not a valid network interface!"
+    assert ROS_INTERFACE_NAME in interfaces(), (
+        f"{ROS_INTERFACE_NAME} is not a valid network interface!"
+    )
 
     # Get the associated addresses.
     inet_address = ifaddresses(ROS_INTERFACE_NAME)[AF_INET]
@@ -102,6 +100,11 @@ def _run_camera() -> roslaunch.parent.ROSLaunchParent:
                     f"frame_id:={frame_id}",
                     f"encoder:={encoder}",
                     f"model_dir:={model_dir}",
+                    # This is to work around a bug in how libcamera handles the
+                    # IMX500 sensor used on the stereo cameras. It turns out
+                    # we can't let it select 2x2 binning mode because this will
+                    # significantly lower the image quality.
+                    f"enable_mode_select:={not is_stereo}",
                 ],
             )
         ],

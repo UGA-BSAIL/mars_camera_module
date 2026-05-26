@@ -11,6 +11,8 @@
      default="/usr/share/rpi-camera-assets/ai_pheno/hailo_yolov8_flower_inference.json"/>
     <arg name="ir_postprocess_file"
      default="/usr/share/rpi-camera-assets/ai_pheno/motion.json"/>
+    <!-- Whether to enable automatic mode selection on the camera sensor. -->
+    <arg name="enable_mode_select" default="true"/>
 
     <!-- RGB camera -->
     <include file="$(find libcamera_device)/launch/video.launch">
@@ -21,6 +23,7 @@
             <arg name="encoder" value="$(arg encoder)" />
             <arg name="fps" value="24" />
             <arg name="postprocess_file" value="$(arg postprocess_file)" />
+            <arg name="enable_mode_select" value="$(arg enable_mode_select)"/>
     </include>
     <!-- IR camera -->
     <include file="$(find libcamera_device)/launch/video.launch">

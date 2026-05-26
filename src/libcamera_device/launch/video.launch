@@ -20,6 +20,8 @@
     <arg name="postprocess_file" default=""/>
     <!-- The transform to apply to the images. Supports "none" or "hflip". -->
     <arg name="transform" default="none"/>
+    <!-- Whether to enable automatic mode selection on the camera sensor. -->
+    <arg name="enable_mode_select" default="true"/>
 
     <node name="$(arg node_name)" pkg="libcamera_device" type="libcamera_device_node" required="true" output="screen">
         <param name="ffmpeg/qmax" value="$(arg quality)"/>
@@ -33,8 +35,9 @@
         <param name="frame_id" value="$(arg frame_id)"/>
         <param name="device_id" value="$(arg device_id)"/>
         <param name="postprocess_file" value="$(arg postprocess_file)"/>
-	    <remap from="detections" to="/$(arg node_name)/detections"/>
-	    <remap from="motion" to="/$(arg node_name)/motion"/>
-	    <remap from="frame_headers" to="/$(arg node_name)/frame_headers"/>
+        <param name="enable_mode_select" value="$(arg enable_mode_select)"/>
+        <remap from="detections" to="/$(arg node_name)/detections"/>
+        <remap from="motion" to="/$(arg node_name)/motion"/>
+        <remap from="frame_headers" to="/$(arg node_name)/frame_headers"/>
     </node>
 </launch>
