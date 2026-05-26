@@ -337,9 +337,7 @@ void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) {
   options->post_process_libs = new_options.post_process_libs;
   options->post_process_file = new_options.post_process_file;
   options->transform = new_options.transform;
-  // Note: need to force the raw stream to off, otherwise it causes weird
-  // resolution issues with the video output.
-  options->no_raw = true;
+  options->no_raw = new_options.no_raw;
 
   // Apply the new configuration.
   camera_app_->ReConfigureFromOptions();
