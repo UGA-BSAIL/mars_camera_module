@@ -215,13 +215,34 @@ void FFMPEGEncoder::encodeImage(const cv::Mat &img,
     memcpy(frame_->data[0], p, width * height * 3);
   } else if (targetFmt == AV_PIX_FMT_YUV420P ||
              targetFmt == AV_PIX_FMT_YUVJ420P) {
+    if ((width % 2) != 0 || (height % 2) != 0) {
+      ROS_ERROR_STREAM("YUV420 requires even frame dimensions, got " << width
+                       << "x" << height);
+      return;
+    }
+
     cv::Mat yuv;
     cv::cvtColor(img, yuv, cv::COLOR_BGR2YUV_I420);
-    const uint8_t *p = yuv.data;
-    memcpy(frame_->data[0], p, width * height);
-    memcpy(frame_->data[1], p + width * height, width * height / 4);
-    memcpy(frame_->data[2], p + width * (height + height / 4),
-           (width * height) / 4);
+    if (!yuv.isContinuous()) {
+      yuv = yuv.clone();
+    }
+
+    const uint8_t *srcY = yuv.data;
+    const uint8_t *srcU = srcY + width * height;
+    const uint8_t *srcV = srcU + (width * height) / 4;
+
+    for (int r = 0; r < height; ++r) {
+      memcpy(frame_->data[0] + r * frame_->linesize[0], srcY + r * width,
+             width);
+    }
+    for (int r = 0; r < height / 2; ++r) {
+      memcpy(frame_->data[1] + r * frame_->linesize[1],
+             srcU + r * (width / 2), width / 2);
+    }
+    for (int r = 0; r < height / 2; ++r) {
+      memcpy(frame_->data[2] + r * frame_->linesize[2],
+             srcV + r * (width / 2), width / 2);
+    }
   } else {
     ROS_ERROR_STREAM("cannot convert format bgr8 -> "
                      << (int)codecContext_->pix_fmt);
