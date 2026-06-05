@@ -155,7 +155,7 @@ bool YoloInference::Process(CompletedRequestPtr& completed_request) {
   if (kFrameWidth != InputTensorSize().width ||
       kFrameHeight != InputTensorSize().height) {
     ROS_ERROR_STREAM("Wrong low res size, expecting "
-                     << InputTensorSize().toString());
+                     << InputTensorSize().toString() << ", got " << kFrameWidth << "x" << kFrameHeight);
     return false;
   }
 
