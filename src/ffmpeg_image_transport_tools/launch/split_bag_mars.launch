@@ -29,6 +29,14 @@
        "/camera5_ir/ffmpeg",
        "/camera6/ffmpeg",
        "/camera6_ir/ffmpeg",
+       "/camera7/ffmpeg",
+       "/camera7_right/ffmpeg",
+       "/camera8/ffmpeg",
+       "/camera8_right/ffmpeg",
+       "/camera9/ffmpeg",
+       "/camera9_right/ffmpeg",
+       "/camera10/ffmpeg",
+       "/camera10_right/ffmpeg",
       ]
     </rosparam>
     <param name="write_time_stamps" value="$(arg write_time_stamps)"/>
