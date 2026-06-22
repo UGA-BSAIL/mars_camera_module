@@ -10,6 +10,7 @@
 #include <ros/ros.h>
 
 #include <fstream>
+#include <string>
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -21,7 +22,7 @@ namespace ffmpeg_image_transport_tools {
   public:
     class Session {
     public:
-      Session(const std::string &topic, const std::string &base,
+      Session(std::string topic, const std::string &base,
               bool writeTimeStamp, unsigned int idx);
       ~Session();
       void process(const FFMPEGPacketConstPtr &msg);
@@ -31,6 +32,19 @@ namespace ffmpeg_image_transport_tools {
       std::ofstream           rawStream_;
       std::ofstream           ts_;
       unsigned int            frameCnt_{0};
+
+      /// The index of the camera.
+      unsigned int camera_index_;
+      /// The base name of the output file.
+      std::string output_base_name_;
+
+      /**
+       * @brief Opens the appropriate file for writing out the packet data
+       *    and returns it.
+       * @param msg An example packet that we will write.
+       * @return The file stream for writing.
+       */
+      std::ofstream&openRawStream(const SplitBag::FFMPEGPacketConstPtr &msg);
     };
     
     SplitBag(const ros::NodeHandle& pnh);

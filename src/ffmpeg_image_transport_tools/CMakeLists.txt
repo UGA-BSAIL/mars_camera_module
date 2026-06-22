@@ -18,7 +18,8 @@ sensor_msgs)
 
 find_package(OpenCV)
 
-include_directories(include
+include_directories(BEFORE
+        include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS})
 
@@ -37,7 +38,7 @@ target_link_libraries(play_bag_node play_bag ${catkin_LIBRARIES}
 )
 
 add_executable(decode_bag src/decode_bag.cpp src/decode_bag_node.cpp)
-target_link_libraries(decode_bag ${catkin_LIBRARIES}
+target_link_libraries(decode_bag ${catkin_LIBRARIES} ${OpenCV_LIBRARIES}
 )
 
 add_executable(split_bag src/split_bag.cpp src/split_bag_node.cpp)
@@ -45,5 +46,9 @@ target_link_libraries(split_bag ${catkin_LIBRARIES}
 )
 
 add_executable(decode_frames src/decode_frames.cpp src/decode_frames_node.cpp)
-target_link_libraries(decode_frames ${catkin_LIBRARIES}
+IF (${NVIDIA_BUILD})
+    # Add the external project as a dependency.
+    add_dependencies(decode_frames ffmpeg)
+ENDIF ()
+target_link_libraries(decode_frames ${catkin_LIBRARIES} ${FFMPEG_LIBRARIES} ${OpenCV_LIBRARIES}
 )
