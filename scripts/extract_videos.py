@@ -151,6 +151,10 @@ def _extract_topics(bag_file: Path, *, topics: List[str], output_base: Path) -> 
         logger.info("Extracting data for {}...", topic)
         topic_path = reader.message_by_topic(topic)
 
+        if topic_path is None:
+            logger.warning("Topic {} not found in bag, skipping.", topic)
+            continue 
+
         output_dir = output_base.parent
         output_path = output_dir / f"{output_base.name}{topic.replace('/', '_')}.csv"
         shutil.move(topic_path, output_path)
