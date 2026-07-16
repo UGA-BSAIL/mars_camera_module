@@ -55,7 +55,8 @@ initialize the workspace first.
 
 Some tools are also provided for testing the camera while connected to your
 development machine. First, ensure that the IP of your machine is set statically
-to 192.168.1.7.
+to 192.168.1.7. Also, you may need to run `xhost +` in the terminal to allow it
+to display a GUI.
 
 Then, you can start `rviz` and `rqt`:
 
