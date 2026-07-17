@@ -46,7 +46,7 @@ const std::unordered_set<std::string> kParamRequiresReset = {
  * @param publisher Will be used for publishing images.
  * @param image The image to publish.
  */
-void PublishEncoded(const ImagePublisher &publisher, const Image &image) {
+void PublishEncoded(const ImagePublisher& publisher, const Image& image) {
   publisher.publish(image);
 }
 
@@ -55,8 +55,8 @@ void PublishEncoded(const ImagePublisher &publisher, const Image &image) {
  * @param publisher Will be used for publishing detections.
  * @param detections The detections to publish.
  */
-void PublishDetections(const DetectionPublisher::SharedPtr &publisher,
-                       const FrameDetections &detections) {
+void PublishDetections(const DetectionPublisher::SharedPtr& publisher,
+                       const FrameDetections& detections) {
   publisher->publish(detections);
 }
 
@@ -65,8 +65,8 @@ void PublishDetections(const DetectionPublisher::SharedPtr &publisher,
  * @param publisher Will be used for publishing detections.
  * @param motion The detections to publish.
  */
-void PublishMotion(const MotionPublisher::SharedPtr &publisher,
-                   const FrameMotion &motion) {
+void PublishMotion(const MotionPublisher::SharedPtr& publisher,
+                   const FrameMotion& motion) {
   publisher->publish(motion);
 }
 
@@ -74,7 +74,7 @@ void PublishMotion(const MotionPublisher::SharedPtr &publisher,
  * @brief Initializes the video options that never change.
  * @param out_config [out] The options structure to initialize.
  */
-void InitConstantOptions(VideoOptions *out_config) {
+void InitConstantOptions(VideoOptions* out_config) {
   // Set options that are necessary, but that we don't support configuring
   // (yet). We don't have any use for preview mode.
   out_config->nopreview = true;
@@ -97,7 +97,7 @@ void InitConstantOptions(VideoOptions *out_config) {
 
 class CameraNode : public rclcpp::Node {
  public:
-  explicit CameraNode(const rclcpp::NodeOptions &options)
+  explicit CameraNode(const rclcpp::NodeOptions& options)
       : Node("camera", options),
         param_subscriber_(
             std::make_shared<rclcpp::ParameterEventHandler>(this)) {
@@ -175,31 +175,33 @@ class CameraNode : public rclcpp::Node {
     // Create a publisher for images.
     const auto node_shared = std::shared_ptr<Node>(this);
     image_transport_ = std::make_shared<ImageTransport>(node_shared);
-    image_publisher_ = image_transport_->advertise(get_name(), 1);
+    image_publisher_ = image_transport_->advertise(
+        get_name(), rclcpp::SensorDataQoS().get_rmw_qos_profile());
     // Create a publisher for detections.
-    detection_publisher_ =
-        create_publisher<FrameDetections>("detections", 10);
+    detection_publisher_ = create_publisher<FrameDetections>(
+        "detections", rclcpp::SensorDataQoS());
     // Create a publisher for motion.
-    motion_publisher_ = create_publisher<FrameMotion>("motion", 10);
+    motion_publisher_ =
+        create_publisher<FrameMotion>("motion", rclcpp::SensorDataQoS());
 
     // Set up the publisher callbacks.
     camera_ = std::make_unique<CameraMessenger>(
         std::make_unique<RPiCamEncoder>(),
         get_parameter("frame_id").as_string(), options_, node_shared);
-    camera_->SetMessageReadyCallback([this](const Image &image) {
+    camera_->SetMessageReadyCallback([this](const Image& image) {
       PublishEncoded(image_publisher_, image);
     });
     camera_->SetDetectionsReadyCallback(
-        [this](const FrameDetections &detections) {
+        [this](const FrameDetections& detections) {
           PublishDetections(detection_publisher_, detections);
         });
-    camera_->SetMotionReadyCallback([this](const FrameMotion &motion) {
+    camera_->SetMotionReadyCallback([this](const FrameMotion& motion) {
       PublishMotion(motion_publisher_, motion);
     });
 
     // Set up the parameter callbacks.
     param_callback_ = param_subscriber_->add_parameter_event_callback(
-        [this](const ParameterEvent &parameter_event) {
+        [this](const ParameterEvent& parameter_event) {
           ReconfigureParams(parameter_event);
         });
   }
@@ -289,14 +291,14 @@ class CameraNode : public rclcpp::Node {
    * for parameter events.
    * @param parameter_event A list of changed parameters.
    */
-  void ReconfigureParams(const ParameterEvent &parameter_event) const {
+  void ReconfigureParams(const ParameterEvent& parameter_event) const {
     // Set the new parameters.
     VideoOptions new_options = options_;
     ParamsToVideoConfig(parameter_event.changed_parameters, &new_options);
 
     bool reset_camera = false;
-    for (const auto &param_msg : parameter_event.changed_parameters) {
-      const auto &param = rclcpp::Parameter::from_parameter_msg(param_msg);
+    for (const auto& param_msg : parameter_event.changed_parameters) {
+      const auto& param = rclcpp::Parameter::from_parameter_msg(param_msg);
       if (param.get_name() == "lock_focus") {
         // Set focus lock.
         RCLCPP_INFO_STREAM(get_logger(),
@@ -318,7 +320,7 @@ class CameraNode : public rclcpp::Node {
 
       try {
         camera_->Start();
-      } catch (const std::runtime_error &e) {
+      } catch (const std::runtime_error& e) {
         RCLCPP_FATAL_STREAM(get_logger(),
                             "Failed to start camera: " << e.what());
         // There's no easy way to recover from this. The best policy is to exit
@@ -334,12 +336,12 @@ class CameraNode : public rclcpp::Node {
    * @param parameters The changed parameters.
    * @param out_config [out] The camera configuration.
    */
-  void ParamsToVideoConfig(const std::vector<Parameter> &parameters,
-                           VideoOptions *out_config) const {
+  void ParamsToVideoConfig(const std::vector<Parameter>& parameters,
+                           VideoOptions* out_config) const {
     InitConstantOptions(out_config);
 
-    for (const auto &param_msg : parameters) {
-      const auto &param = rclcpp::Parameter::from_parameter_msg(param_msg);
+    for (const auto& param_msg : parameters) {
+      const auto& param = rclcpp::Parameter::from_parameter_msg(param_msg);
       if (param.get_name() == "fps") {
         RCLCPP_INFO_STREAM(get_logger(), "Updating FPS to " << param.as_int());
         out_config->framerate = param.as_int();
@@ -409,7 +411,7 @@ class CameraNode : public rclcpp::Node {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
 
   CameraNode node{rclcpp::NodeOptions()};

@@ -8,6 +8,7 @@
 #include <libcamera_device_msgs/msg/detection.hpp>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 #include <utility>
@@ -44,14 +45,14 @@ using std_msgs::msg::Header;
 
 }  // namespace
 
-CameraMessenger::CameraMessenger(std::unique_ptr<RPiCamEncoder> &&camera_app,
+CameraMessenger::CameraMessenger(std::unique_ptr<RPiCamEncoder>&& camera_app,
                                  std::string frame_id,
-                                 const VideoOptions &options,
+                                 const VideoOptions& options,
                                  rclcpp::Node::SharedPtr node_handle)
     : node_(node_handle),
       camera_app_(std::move(camera_app)),
       frame_id_(std::move(frame_id)),
-      on_message_ready_([=](const Image &) {
+      on_message_ready_([=](const Image&) {
         // Default callback does nothing, but logs a warning.
         RCLCPP_INFO_STREAM(
             node_handle->get_logger(),
@@ -65,7 +66,7 @@ CameraMessenger::~CameraMessenger() {
   Stop();
 }
 
-void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
+void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
                                        int64_t timestamp_us, uint32_t) {
   if (!on_message_ready_) {
     // Don't bother with the translation if we don't have a callback.
@@ -85,7 +86,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
 
   // I don't get why people still use void pointers in the Year of Our Lord
   // 2022...
-  const uint8_t *byte_buffer = static_cast<uint8_t *>(buffer);
+  const uint8_t* byte_buffer = static_cast<uint8_t*>(buffer);
   // Copy raw image data.
   message.data.assign(byte_buffer, byte_buffer + buffer_size);
 
@@ -94,7 +95,7 @@ void CameraMessenger::TranslateEncoded(void *buffer, size_t buffer_size,
 }
 
 void CameraMessenger::TranslateDetections(
-    const CompletedRequestPtr &completed_request) {
+    const CompletedRequestPtr& completed_request) {
   FrameDetections detections_message;
 
   FillHeaderFromMeta(&detections_message.header, completed_request,
@@ -109,7 +110,7 @@ void CameraMessenger::TranslateDetections(
 
   const auto kFrameWidth = static_cast<float>(stream_info_.width);
   const auto kFrameHeight = static_cast<float>(stream_info_.height);
-  for (const auto &detection : detections) {
+  for (const auto& detection : detections) {
     Detection ros_detection;
     ros_detection.center_x = static_cast<float>(detection.box.x) / kFrameWidth;
     ros_detection.center_y = static_cast<float>(detection.box.y) / kFrameHeight;
@@ -122,22 +123,28 @@ void CameraMessenger::TranslateDetections(
   }
 
   // Copy the appearance features.
-  std::vector<uint8_t> features;
   hailo_3d_image_shape_t features_shape{0, 0, 0};
-  if (completed_request->post_process_metadata.Get("object_detect.features",
-                                                   features) ||
-      completed_request->post_process_metadata.Get(
-          "object_detect.features_shape", features_shape)) {
-    // Completed request had no appearance features, HAILO is probably not
-    // active.
-    RCLCPP_DEBUG_STREAM(
-        node_->get_logger(),
-        "A callback for detections was specified, but this frame has no "
-        "appearance features.");
+  {
+    std::lock_guard<Metadata> lock(completed_request->post_process_metadata);
+    const auto* features =
+        completed_request->post_process_metadata
+            .GetLocked<std::vector<uint8_t>>("object_detect.features");
+    const auto* shape =
+        completed_request->post_process_metadata
+            .GetLocked<hailo_3d_image_shape_t>("object_detect.features_shape");
+    if (features == nullptr || shape == nullptr) {
+      // Completed request had no appearance features, HAILO is probably not
+      // active.
+      RCLCPP_DEBUG_STREAM(
+          node_->get_logger(),
+          "A callback for detections was specified, but this frame has no "
+          "appearance features.");
+    } else {
+      detections_message.appearance_features.assign(features->begin(),
+                                                    features->end());
+      features_shape = *shape;
+    }
   }
-  detections_message.appearance_features.resize(features.size());
-  std::copy(features.begin(), features.end(),
-            detections_message.appearance_features.begin());
   // Batch size is always one.
   detections_message.appearance_feature_shape[0] = 1;
   detections_message.appearance_feature_shape[1] = features_shape.height;
@@ -151,7 +158,7 @@ void CameraMessenger::TranslateDetections(
 }
 
 void CameraMessenger::TranslateMotion(
-    const CompletedRequestPtr &completed_request) {
+    const CompletedRequestPtr& completed_request) {
   uint32_t regions_with_motion;
   if (completed_request->post_process_metadata.Get(
           "motion_detect.regions_above_threshold", regions_with_motion)) {
@@ -173,21 +180,21 @@ void CameraMessenger::TranslateMotion(
 }
 
 void CameraMessenger::SetMessageReadyCallback(
-    const ImageReadyCallback &callback) {
+    const ImageReadyCallback& callback) {
   RCLCPP_DEBUG_STREAM(node_->get_logger(),
                       "Setting new callback for camera messages.");
   on_message_ready_ = callback;
 }
 
 void CameraMessenger::SetDetectionsReadyCallback(
-    const DetectionsReadyCallback &callback) {
+    const DetectionsReadyCallback& callback) {
   RCLCPP_DEBUG_STREAM(node_->get_logger(),
                       "Setting new callback for detections.");
   on_detections_ready_ = callback;
 }
 
 void CameraMessenger::SetMotionReadyCallback(
-    const MotionReadyCallback &callback) {
+    const MotionReadyCallback& callback) {
   RCLCPP_DEBUG_STREAM(node_->get_logger(), "Setting new callback for motion.");
   on_motion_ready_ = callback;
 }
@@ -261,7 +268,7 @@ bool CameraMessenger::WaitForFrame() {
       "Got unrecognized message type " << static_cast<uint32_t>(message.type)
                                        << " from LibCamera!");
 
-  auto &completed_request = std::get<CompletedRequestPtr>(message.payload);
+  auto& completed_request = std::get<CompletedRequestPtr>(message.payload);
   camera_app_->EncodeBuffer(completed_request, camera_app_->VideoStream());
   TranslateDetections(completed_request);
   TranslateMotion(completed_request);
@@ -280,7 +287,7 @@ void CameraMessenger::UpdateStreamInfo() {
                           << ", which is not supported.");
   ros_pixel_format_ = encoding->second;
 }
-void CameraMessenger::FillHeader(Header *header, uint32_t timestamp_us) const {
+void CameraMessenger::FillHeader(Header* header, uint32_t timestamp_us) const {
   // Sensor timestamps are from the kernel clock, but we want them relative to
   // the wall clock.
   const uint64_t kWallTimestampUs = KernelToRosClock(timestamp_us);
@@ -290,7 +297,7 @@ void CameraMessenger::FillHeader(Header *header, uint32_t timestamp_us) const {
 }
 
 void CameraMessenger::FillHeaderFromMeta(
-    Header *header, const CompletedRequestPtr &completed_request,
+    Header* header, const CompletedRequestPtr& completed_request,
     uint32_t sequence_num) const {
   // Sensor timestamps are from the kernel clock, but we want them relative to
   // the wall clock.
@@ -329,9 +336,9 @@ uint64_t CameraMessenger::KernelToRosClock(uint32_t timestamp_us) const {
   return kUnwrappedSensorTime + kUSecOffset.count();
 }
 
-void CameraMessenger::ConfigureOptions(const VideoOptions &new_options) const {
+void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) const {
   // Copy the specified options to the camera app.
-  auto *options = camera_app_->GetOptions();
+  auto* options = camera_app_->GetOptions();
 
   options->nopreview = new_options.nopreview;
   options->denoise = new_options.denoise;

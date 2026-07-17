@@ -4,6 +4,8 @@ std_msgs/Header header
 Detection[] detections
 
 # Appearance features for the frame (serialized numpy array)
-uint8[] appearance_features
+# Increase maximum size if needed, but this is sufficient for all the models
+# that we're currently using.
+uint8[<=3500000] appearance_features
 # Original appearance feature shape
 uint16[4] appearance_feature_shape

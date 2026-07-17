@@ -10,6 +10,7 @@
 #include <libcamera/controls.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <hailort_common.hpp>
 #include <mutex>
@@ -19,9 +20,9 @@
 #include "../core/logging.hpp"
 
 using Size = libcamera::Size;
-using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams *);
-using InitFuncPtr = YoloParams *(*)(std::string, std::string);
-using FreeFuncPtr = void (*)(void *);
+using PostProcFuncPtrNms = void (*)(HailoROIPtr, YoloParams*);
+using InitFuncPtr = YoloParams* (*)(std::string, std::string);
+using FreeFuncPtr = void (*)(void*);
 using Detection = postproc::Detection;
 
 using Rectangle = libcamera::Rectangle;
@@ -46,8 +47,8 @@ const std::unordered_map<hailo_format_type_t, uint8_t> kHailoTypeSizes{
  * @param out_tensor The output tensor.
  * @param data The raw data to extract.
  */
-void ExtractOutputTensorData(const OutTensor &out_tensor,
-                             std::vector<uint8_t> &data) {
+template <typename T>
+void ExtractOutputTensorData(const OutTensor& out_tensor, T& data) {
   // Compute the size.
   const auto kDataSize = kHailoTypeSizes.find(out_tensor.format.type);
   if (kDataSize == kHailoTypeSizes.end()) {
@@ -64,7 +65,7 @@ void ExtractOutputTensorData(const OutTensor &out_tensor,
 
 }  // namespace
 
-YoloInference::YoloInference(RPiCamApp *app)
+YoloInference::YoloInference(RPiCamApp* app)
     : HailoPostProcessingStage(app),
       postproc_nms_(PostProcLibDir(POSTPROC_LIB_NMS)) {}
 
@@ -76,9 +77,9 @@ YoloInference::~YoloInference() {
   }
 }
 
-char const *YoloInference::Name() const { return NAME; }
+char const* YoloInference::Name() const { return NAME; }
 
-void YoloInference::Read(boost::property_tree::ptree const &params) {
+void YoloInference::Read(boost::property_tree::ptree const& params) {
   max_detections_ = params.get<unsigned int>("max_detections");
   threshold_ = params.get<float>("threshold", 0.5f);
 
@@ -108,11 +109,9 @@ void YoloInference::Read(boost::property_tree::ptree const &params) {
   HailoPostProcessingStage::Read(params);
 }
 
-void YoloInference::Configure() {
-  HailoPostProcessingStage::Configure();
-}
+void YoloInference::Configure() { HailoPostProcessingStage::Configure(); }
 
-bool YoloInference::Process(CompletedRequestPtr &completed_request) {
+bool YoloInference::Process(CompletedRequestPtr& completed_request) {
   if (!HailoPostProcessingStage::Ready()) {
     LOG_ERROR("HailoRT not ready!");
     return false;
@@ -120,15 +119,14 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
 
   if (low_res_info_.width != InputTensorSize().width ||
       low_res_info_.height != InputTensorSize().height) {
-    LOG_ERROR("Wrong low res size, expecting "
-                     << InputTensorSize().toString());
+    LOG_ERROR("Wrong low res size, expecting " << InputTensorSize().toString());
     return false;
   }
 
   BufferReadSync r(app_, completed_request->buffers[low_res_stream_]);
   libcamera::Span<uint8_t> buffer = r.Get()[0];
   std::shared_ptr<uint8_t> input;
-  uint8_t *input_ptr;
+  uint8_t* input_ptr;
 
   if (low_res_info_.pixel_format == libcamera::formats::YUV420) {
     StreamInfo rgb_info;
@@ -187,7 +185,7 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
       filterOutputObjects(objects);
       if (lt_objects_.size()) {
         objects.clear();
-        for (auto const &obj : lt_objects_) {
+        for (auto const& obj : lt_objects_) {
           if (!obj.hidden) objects.push_back(obj.params);
         }
       }
@@ -199,13 +197,13 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
   }
 
   // Save the appearance features as well.
-  for (const auto &output : output_tensors) {
+  for (const auto& output : output_tensors) {
     if (!hailort::HailoRTCommon::is_nms(output.format.order)) {
       // This is the appearance feature.
       std::vector<uint8_t> output_data;
       ExtractOutputTensorData(output, output_data);
       completed_request->post_process_metadata.Set("object_detect.features",
-                                                   output_data);
+                                                   std::move(output_data));
       completed_request->post_process_metadata.Set(
           "object_detect.features_shape", output.shape);
     }
@@ -214,8 +212,8 @@ bool YoloInference::Process(CompletedRequestPtr &completed_request) {
   return false;
 }
 
-bool YoloInference::runHailoJob(const uint8_t *frame,
-                                std::vector<OutTensor> &output_tensors) {
+bool YoloInference::runHailoJob(const uint8_t* frame,
+                                std::vector<OutTensor>& output_tensors) {
   hailort::AsyncInferJob job;
   hailo_status status;
 
@@ -232,8 +230,7 @@ bool YoloInference::runHailoJob(const uint8_t *frame,
   // Wait for job completion.
   status = job.wait(1s);
   if (status != HAILO_SUCCESS) {
-    LOG_ERROR(
-        "Failed to wait for inference to finish, status = " << status);
+    LOG_ERROR("Failed to wait for inference to finish, status = " << status);
     return false;
   }
 
@@ -241,8 +238,8 @@ bool YoloInference::runHailoJob(const uint8_t *frame,
 }
 
 std::vector<Detection> YoloInference::runInference(
-    const uint8_t *frame, const std::vector<Rectangle> &scaler_crops,
-    std::vector<OutTensor> &output_tensors) {
+    const uint8_t* frame, const std::vector<Rectangle>& scaler_crops,
+    std::vector<OutTensor>& output_tensors) {
   if (!runHailoJob(frame, output_tensors)) {
     return {};
   }
@@ -250,7 +247,7 @@ std::vector<Detection> YoloInference::runInference(
   // Only do this post-processing for box outputs. Auxiliary outputs will not
   // be touched.
   std::vector<OutTensor> box_output_tensors;
-  for (auto &t : output_tensors) {
+  for (auto& t : output_tensors) {
     if (hailort::HailoRTCommon::is_nms(t.format.order)) {
       box_output_tensors.push_back(t);
     }
@@ -266,11 +263,11 @@ std::vector<Detection> YoloInference::runInference(
 
   // Translate results to the rpicam-apps Detection objects
   std::vector<Detection> results;
-  for (auto const &d : detections) {
+  for (auto const& d : detections) {
     if (d->get_confidence() < threshold_) continue;
 
     // Extract bounding box co-ordinates in the output image co-ordinates.
-    auto const &box = d->get_bbox();
+    auto const& box = d->get_bbox();
     const float x0 = std::max(box.xmin(), 0.0f);
     const float x1 = std::min(box.xmax(), 1.0f);
     const float y0 = std::max(box.ymin(), 0.0f);
@@ -286,14 +283,14 @@ std::vector<Detection> YoloInference::runInference(
   return results;
 }
 
-void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
+void YoloInference::filterOutputObjects(std::vector<Detection>& objects) {
   const Size isp_output_size = output_stream_->configuration().size;
 
-  for (auto &lt_obj : lt_objects_) lt_obj.matched = false;
+  for (auto& lt_obj : lt_objects_) lt_obj.matched = false;
 
-  for (auto const &object : objects) {
+  for (auto const& object : objects) {
     bool matched = false;
-    for (auto &lt_obj : lt_objects_) {
+    for (auto& lt_obj : lt_objects_) {
       // Try and match a detected object in our long term list.
       if (object.category == lt_obj.params.category &&
           std::abs(object.box.x - lt_obj.params.box.x) <
@@ -329,7 +326,7 @@ void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
       lt_objects_.push_back({object, visible_frames_, hidden_frames_, 1});
   }
 
-  for (auto &lt_obj : lt_objects_) {
+  for (auto& lt_obj : lt_objects_) {
     if (!lt_obj.matched) {
       // If a non matched object in the long term list is still hidden, set
       // visible count to 0 so that it must be matched for hidden_frames_
@@ -344,13 +341,13 @@ void YoloInference::filterOutputObjects(std::vector<Detection> &objects) {
 
   // Remove now invisible objects from the long term list.
   lt_objects_.erase(std::remove_if(lt_objects_.begin(), lt_objects_.end(),
-                                   [](const LtObject &obj) {
+                                   [](const LtObject& obj) {
                                      return !obj.matched && !obj.visible;
                                    }),
                     lt_objects_.end());
 }
 
-static PostProcessingStage *Create(RPiCamApp *app) {
+static PostProcessingStage* Create(RPiCamApp* app) {
   return new YoloInference(app);
 }
 
