@@ -1,4 +1,4 @@
-# Common container with a ROS Noetic installation.
+# Common container with a ROS Humble installation.
 FROM ros:humble-ros-core as common
 
 # Fix timezones.
@@ -19,8 +19,6 @@ RUN usermod -p '*' ros
 
 # Container for building the code.
 FROM common as builder
-
-
 
 # Install libcamera.
 RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yaml python3-ply \
@@ -83,9 +81,6 @@ RUN mkdir -p /usr/include/hailo/tappas/ && \
     cp -R /hailo/tappas/core/hailo/tracking/* /usr/include/hailo/tappas/ && \
     cp -R /hailo/tappas/core/hailo/libs/postprocesses/* /usr/include/hailo/tappas
 
-# Copy the wrapper script for cmake.
-ADD scripts/colcon_cmake.sh /usr/bin/colcon_cmake
-
 # Set up SSH for CLion.
 ARG ROS_SSH_PUBLIC_KEY
 RUN apt-get update && apt-get install -y ssh rsync && rm -rf /var/lib/apt/lists/*
@@ -108,19 +103,22 @@ RUN test -n "$ROS_SSH_PUBLIC_KEY" \
 
 # Password login is disabled; SSH key auth is configured via ROS_SSH_PUBLIC_KEY.
 
+# Copy the wrapper script for cmake.
+ADD scripts/zed_colcon_build.sh /usr/bin/zed_colcon_build
+
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
 
 # Container for video extraction.
 FROM builder as video_extractor
 
-WORKDIR /home/ros/ros_libcamera/
+WORKDIR /home/ros/mars_camera_module/
 ADD src/ src/
-RUN chown -R ros:ros /home/ros/ros_libcamera/
+RUN chown -R ros:ros /home/ros/mars_camera_module/
 
 # Build the code.
 USER ros
 
-RUN bash -c "source /opt/ros/noetic/setup.bash && colcon build"
+RUN bash -c "source /opt/ros/humble/setup.bash && colcon build"
 
 # Add scripts to run.
 ADD scripts/extract_videos.py extract_videos.py

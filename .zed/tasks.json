@@ -1,8 +1,8 @@
 [
     {
-        "label": "catkin_make",
+        "label": "colcon_build",
         "command": "bash",
-        "args": ["./scripts/zed_catkin_make.sh"],
+        "args": ["zed_colcon_build"],
         "cwd": "$ZED_WORKTREE_ROOT"
     }
 ]

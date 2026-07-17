@@ -1,4 +1,5 @@
 # mars_camera_module
+
 Contains all the code that runs on the MARS camera module.
 
 ## Building
@@ -52,6 +53,4 @@ the following section to `~/.config/zed/settings.json`:
 ```
 
 After this, you should be able to open the remote path. To test that everything
-is working, run the `catkin_make` task from within Zed. If you get an error
-about the workspace setup file not existing, you will have to manually
-initialize the workspace first.
+is working, run the `colcon_build` task from within Zed.

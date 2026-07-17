@@ -138,7 +138,7 @@ if(BUILD_TESTING)
   ament_pep257()
   ament_xmllint()
 
-  find_package(ffmpeg_image_transport_msgs)
+  find_package(ffmpeg_image_transport_msgs REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(${PROJECT_NAME}_test test/encoder_decoder_test.cpp test/encoder_decoder_tester.cpp
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test)

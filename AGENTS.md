@@ -1,7 +1,9 @@
 # AGENTS.md
 
 ## Code style
+
 ### Python code style
+
 - Use double quotes for strings
 - Create docstrings for all functions in the Google style
 - Use 4 spaces for indentations
@@ -11,6 +13,7 @@
 - Assume Python 3.8 compatibility
 
 ### C++ code style
+
 - Create docstrings for all functions, classes, and files in the Doxygen style
 - Use 4 spaces for indentations
 - When editing code, don't remove existing comments
@@ -18,3 +21,7 @@
 - Always put opening curly braces on the same line as the corresponding statement
 - Never use bare `if` `else` statements without braces
 - Avoid defining functions in header files when possible
+
+## Building the Code
+
+You will need to make sure you've sourced the correct workspace before interacting with `colcon`, e.g. `source install/setup.sh`. Colcon commands should then work.
