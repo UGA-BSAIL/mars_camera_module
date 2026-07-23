@@ -12,3 +12,5 @@ tappas_*_linux_installer.zip
 *.deb
 
 .catkin_workspace
+
+*.orig

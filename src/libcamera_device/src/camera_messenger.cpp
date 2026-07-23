@@ -129,7 +129,7 @@ void CameraMessenger::TranslateEncoded(void* buffer, size_t buffer_size,
     message.data.assign(byte_buffer, byte_buffer + buffer_size);
   }
 
-  // WaitForFrame the callback with the new message.
+  // Run the callback with the new message.
   on_message_ready_(message);
 }
 
@@ -376,6 +376,7 @@ void CameraMessenger::ConfigureOptions(const VideoOptions& new_options) {
   options->post_process_file = new_options.post_process_file;
   options->transform = new_options.transform;
   options->no_raw = new_options.no_raw;
+  options->buffer_count = new_options.buffer_count;
 
   // Apply the new configuration.
   camera_app_->ReConfigureFromOptions();

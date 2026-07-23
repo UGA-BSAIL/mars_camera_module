@@ -115,6 +115,14 @@ void ParamToVideoConfig(const StaticConfig static_config,
   out_config->afWindow_width = 0.5;
   out_config->afWindow_height = 0.5;
 
+  // Handle buffer count, default is 6.
+  out_config->buffer_count = 6;
+  if (out_config->width * out_config->height > 1920 * 1088) {
+    // For extremely high resolution outputs, I've found that we need more
+    // buffering to prevent tearing.
+    out_config->buffer_count = 12;
+  }
+
   out_config->ev = static_cast<float>(dynamic_config.ev);
   out_config->brightness = 0.0;
   out_config->contrast = static_cast<float>(dynamic_config.contrast);
