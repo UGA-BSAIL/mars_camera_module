@@ -10,6 +10,8 @@
     <arg name="postprocess_file" default="/usr/share/rpi-camera-assets/ai_pheno/hailo_yolov11_blueberry_inference.json"/>
     <!-- Whether to enable automatic mode selection on the camera sensor. -->
     <arg name="enable_mode_select" default="true"/>
+    <!-- Framerate to set for the cameras. -->
+    <arg name="frame_rate" default="10"/>
 
     <!-- Left camera -->
     <include file="$(find libcamera_device)/launch/video.launch">
@@ -19,9 +21,10 @@
         <arg name="quality" value="4"/>
         <arg name="encoder" value="$(arg encoder)" />
         <!-- Flip the width and height since the cameras are rotated. -->
-        <arg name="width" value="1440"/>
-        <arg name="height" value="2560"/>
-        <arg name="fps" value="24" />
+        <!-- Must be divisible by 32. -->
+        <arg name="width" value="1728"/>
+        <arg name="height" value="3040"/>
+        <arg name="fps" value="$(arg frame_rate)" />
         <arg name="postprocess_file" value="$(arg postprocess_file)" />
         <arg name="enable_mode_select" value="$(arg enable_mode_select)"/>
     </include>
@@ -33,9 +36,10 @@
         <arg name="quality" value="4"/>
         <arg name="encoder" value="$(arg encoder)" />
         <!-- Flip the width and height since the cameras are rotated. -->
-        <arg name="width" value="1440"/>
-        <arg name="height" value="2560"/>
-        <arg name="fps" value="24" />
+        <!-- Must be divisible by 32. -->
+        <arg name="width" value="1728"/>
+        <arg name="height" value="3040"/>
+        <arg name="fps" value="$(arg frame_rate)" />
         <!-- For now, we only run AI phenotyping on the left head. -->
         <arg name="postprocess_file" value="" />
         <arg name="enable_mode_select" value="$(arg enable_mode_select)"/>
@@ -47,5 +51,6 @@
     <include file="$(find mars_camera_hw_manager)/launch/camera_sync.launch">
         <arg name="primary_camera_id" value="$(arg node_name)" />
         <arg name="secondary_camera_id" value="$(arg node_name)_right" />
+        <arg name="frame_rate" value="$(arg frame_rate)" />
     </include>
 </launch>

@@ -17,6 +17,7 @@
 #include "libcamera/formats.h"
 #include "post_processing_stages/hailo/hailo_postprocessing_stage.hpp"
 #include "post_processing_stages/object_detect.hpp"
+#include "ros/console.h"
 
 namespace libcamera_device {
 namespace {
@@ -37,7 +38,7 @@ const std::map<libcamera::PixelFormat, std::string> kPixelFormatToEncoding = {
 
 // Timeout to use when waiting for a frame before we consider the camera
 // stalled.
-const std::chrono::seconds kCameraTimeout(10);
+const std::chrono::seconds kCameraTimeout(5);
 
 /**
  * @brief Converts a kernel timestamp to ROS time.
@@ -256,8 +257,9 @@ void CameraMessenger::Start() {
     ROS_DEBUG_STREAM("Opening camera.");
     camera_app_->OpenCamera();
     camera_open_ = true;
+
+    camera_app_->ConfigureVideo(RPiCamEncoder::FLAG_VIDEO_NONE);
   }
-  camera_app_->ConfigureVideo(RPiCamEncoder::FLAG_VIDEO_NONE);
 
   // Stream info isn't available until after the camera is configured.
   UpdateStreamInfo();
@@ -276,7 +278,6 @@ void CameraMessenger::Stop() {
   ROS_INFO_STREAM("Stopping camera.");
   camera_app_->StopCamera();
   camera_app_->StopEncoder();
-  camera_app_->Teardown();
 }
 
 bool CameraMessenger::WaitForFrame() {
@@ -285,7 +286,7 @@ bool CameraMessenger::WaitForFrame() {
   }
 
   RPiCamEncoder::Msg message = camera_app_->Wait(kCameraTimeout);
-  if (message.type == RPiCamEncoder::MsgType::Timeout) {
+  if (message.type == RPiCamEncoder::MsgType::QueueTimeout) {
     ROS_FATAL_STREAM(
         "Timed out while waiting for a frame. This is either a hardware issue, "
         "or a bug in libcamera.");
@@ -319,6 +320,7 @@ void CameraMessenger::UpdateStreamInfo() {
                                             << ", which is not supported.");
   ros_pixel_format_ = encoding->second;
 }
+
 void CameraMessenger::FillHeader(std_msgs::Header* header,
                                  uint32_t timestamp_us,
                                  uint32_t sequence_num) const {

@@ -47,14 +47,54 @@ std::unordered_map<std::string, libcamera::Transform> kTransformMap{
 };
 
 /**
+ * @brief Monitors camera-related publishers for subscriber activity.
+ */
+class SubscriberMonitor {
+ public:
+  /**
+   * @brief Constructs a subscriber monitor.
+   * @param image_publisher Publisher for camera images.
+   * @param detection_publisher Publisher for camera detections.
+   * @param motion_publisher Publisher for camera motion estimates.
+   */
+  SubscriberMonitor(const ImagePublisher* image_publisher,
+                    const ros::Publisher* detection_publisher,
+                    const ros::Publisher* motion_publisher)
+      : image_publisher_(image_publisher),
+        detection_publisher_(detection_publisher),
+        motion_publisher_(motion_publisher) {}
+
+  /**
+   * @brief Returns true if any relevant camera topic has at least one
+   *  subscriber.
+   */
+  bool CheckForSubscribers() const {
+    return image_publisher_->getNumSubscribers() > 0 ||
+           detection_publisher_->getNumSubscribers() > 0 ||
+           motion_publisher_->getNumSubscribers() > 0;
+  }
+
+ private:
+  const ImagePublisher* image_publisher_;
+  const ros::Publisher* detection_publisher_;
+  const ros::Publisher* motion_publisher_;
+};
+
+/**
  * @brief Publishes the encoded image.
+ * @param subscriber_monitor The subscriber monitor.
  * @param image_publisher The publisher for the image.
  * @param header_publisher A separate publisher for just the image header.
  * @param image The image message to publish.
  */
-void PublishEncoded(const ImagePublisher* image_publisher,
+void PublishEncoded(const SubscriberMonitor* subscriber_monitor,
+                    const ImagePublisher* image_publisher,
                     const ros::Publisher* header_publisher,
                     const Image& image) {
+  if (!subscriber_monitor->CheckForSubscribers()) {
+    return;
+  }
+
   image_publisher->publish(image);
   header_publisher->publish(image.header);
 }
@@ -64,8 +104,13 @@ void PublishEncoded(const ImagePublisher* image_publisher,
  * @param publisher Will be used for publishing detections.
  * @param detections The detections to publish.
  */
-void PublishDetections(const ros::Publisher* publisher,
+void PublishDetections(const SubscriberMonitor* subscriber_monitor,
+                       const ros::Publisher* publisher,
                        const libcamera_device::FrameDetections& detections) {
+  if (!subscriber_monitor->CheckForSubscribers()) {
+    return;
+  }
+
   publisher->publish(detections);
 }
 
@@ -74,8 +119,13 @@ void PublishDetections(const ros::Publisher* publisher,
  * @param publisher Will be used for publishing motion estimates.
  * @param motion The motion estimate to publish.
  */
-void PublishMotion(ros::Publisher* publisher,
+void PublishMotion(const SubscriberMonitor* subscriber_monitor,
+                   ros::Publisher* publisher,
                    const libcamera_device::FrameMotion& motion) {
+  if (!subscriber_monitor->CheckForSubscribers()) {
+    return;
+  }
+
   publisher->publish(motion);
 }
 
@@ -133,8 +183,9 @@ void ParamToVideoConfig(const StaticConfig static_config,
 
   // Disabling the raw stream will force it to not auto-select the sensor mode.
   out_config->no_raw = !static_config.auto_mode_select;
-  ROS_WARN_STREAM_COND(!static_config.auto_mode_select,
-                       "Disabling automatic mode selection for sensor!");
+  if (out_config->no_raw) {
+    ROS_WARN_STREAM_ONCE("Disabling automatic mode selection for sensor!");
+  }
 
   // Configure transformation.
   out_config->transform = libcamera::Transform::Identity;
@@ -184,42 +235,6 @@ void ReconfigureParams(CameraMessenger* messenger,
   }
 }
 
-/**
- * @brief Ensures there is at least one subscriber to the camera topic(s) before
- *  continuing. If there is not one, it will stop the camera until there is.
- * @param image_publisher The camera image publisher.
- * @param detection_publisher The camera detection publisher.
- * @param node The node handle.
- * @param camera The camera itself.
- */
-void WaitForSubscriber(const ImagePublisher& image_publisher,
-                       const ros::Publisher& detection_publisher,
-                       const ros::Publisher& motion_publisher,
-                       const ros::NodeHandle& node, CameraMessenger* camera) {
-  if (image_publisher.getNumSubscribers() > 0 ||
-      detection_publisher.getNumSubscribers() > 0 ||
-      motion_publisher.getNumSubscribers() > 0) {
-    // We already have a subscriber, so we're done before we even started.
-    return;
-  }
-
-  ros::Rate rate(5);
-
-  // Wait for someone to subscribe. In the meantime, there's no point in
-  // running the camera.
-  camera->Stop();
-  ROS_INFO_STREAM("Waiting for a camera subscriber...");
-  while (node.ok() && image_publisher.getNumSubscribers() == 0 &&
-         detection_publisher.getNumSubscribers() == 0 &&
-         motion_publisher.getNumSubscribers() == 0) {
-    rate.sleep();
-    ros::spinOnce();
-  }
-
-  // Someone subscribed. Start the camera again.
-  camera->Start();
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -249,7 +264,7 @@ int main(int argc, char** argv) {
       node.advertise<libcamera_device::FrameMotion>("motion", 10);
   // Create a publisher for just the frame headers.
   ros::Publisher header_publisher =
-      node.advertise<std_msgs::Header>("frame_headers", 10);
+      node.advertise<std_msgs::Header>("frame_headers", 1);
 
   Server<LibcameraDeviceConfig> param_server;
 
@@ -261,15 +276,19 @@ int main(int argc, char** argv) {
   ParamToVideoConfig(kStaticConfig, default_dynamic_config,
                      &default_video_options);
 
+  SubscriberMonitor subscriber_monitor(&image_publisher, &detection_publisher,
+                                       &motion_publisher);
+
   // Set up the camera.
   CameraMessenger camera(std::make_unique<RPiCamEncoder>(), frame_id,
                          default_video_options);
-  camera.SetMessageReadyCallback(
-      std::bind(PublishEncoded, &image_publisher, &header_publisher, kStd1));
-  camera.SetDetectionsReadyCallback(
-      std::bind(PublishDetections, &detection_publisher, kStd1));
+  camera.SetMessageReadyCallback(std::bind(PublishEncoded, &subscriber_monitor,
+                                           &image_publisher, &header_publisher,
+                                           kStd1));
+  camera.SetDetectionsReadyCallback(std::bind(
+      PublishDetections, &subscriber_monitor, &detection_publisher, kStd1));
   camera.SetMotionReadyCallback(
-      std::bind(PublishMotion, &motion_publisher, kStd1));
+      std::bind(PublishMotion, &subscriber_monitor, &motion_publisher, kStd1));
 
   // Configure the dynamic reconfiguration callback.
   Server<LibcameraDeviceConfig>::CallbackType reconfigure_callback =
@@ -285,8 +304,6 @@ int main(int argc, char** argv) {
   }
   ROS_DEBUG_STREAM("Camera initialized!");
   while (node.ok() && camera.WaitForFrame()) {
-    WaitForSubscriber(image_publisher, detection_publisher, motion_publisher,
-                      node, &camera);
     ros::spinOnce();
   }
 

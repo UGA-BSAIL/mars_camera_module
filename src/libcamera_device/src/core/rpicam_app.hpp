@@ -59,7 +59,7 @@ class RPiCamApp {
   using BufferMap = Request::BufferMap;
   using Size = libcamera::Size;
   using Rectangle = libcamera::Rectangle;
-  enum class MsgType { RequestComplete, Timeout, Quit };
+  enum class MsgType { RequestComplete, QueueTimeout, Timeout, Quit };
   typedef std::variant<CompletedRequestPtr> MsgPayload;
   struct Msg {
     Msg(MsgType const& t) : type(t) {}
@@ -158,7 +158,7 @@ class RPiCamApp {
   Msg Wait();
   template <class Rep, class Period>
   Msg Wait(const std::chrono::duration<Rep, Period>& timeout) {
-    Msg message(MsgType::Timeout);
+    Msg message(MsgType::QueueTimeout);
     msg_queue_.Wait(timeout, &message);
     return message;
   }

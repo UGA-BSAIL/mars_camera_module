@@ -5,10 +5,14 @@
     <!-- IDs of the primary and secondary cameras. -->
     <arg name="primary_camera_id"/>
     <arg name="secondary_camera_id"/>
+    <!-- The base frame rates that we are setting the cameras to. -->
+    <arg name="frame_rate"/>
 
     <node name="$(anon camera_sync)" pkg="mars_camera_hw_manager" type="camera_sync" output="screen">
         <remap to="/$(arg primary_camera_id)/frame_headers" from="~primary/frame_headers"/>
+        <param name="primary_node_name" value="$(arg primary_camera_id)"/>
         <param name="secondary_node_name" value="$(arg secondary_camera_id)"/>
+        <param name="frame_rate" value="$(arg frame_rate)"/>
         <param name="kp" value="0.04"/>
     </node>
 </launch>
