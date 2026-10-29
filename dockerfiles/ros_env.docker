@@ -1,6 +1,8 @@
 # Common container with a ROS Noetic installation.
 FROM ros:noetic-ros-core as common
 
+ARG TARGETARCH
+
 # Fix timezones.
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -62,18 +64,16 @@ RUN mkdir -p /run/systemd && echo 'docker' > /run/systemd/container
 RUN dpkg -i hailort.deb || true
 # Update the post-install script.
 ADD hailort_postinst.sh /var/lib/dpkg/info/hailort.postinst
-# This should succeed now.
-RUN dpkg --configure hailort
+# This should succeed now (This issue is only with amd64).
+RUN if [ "$TARGETARCH" != "arm64" ]; then \
+    dpkg --configure hailort; \
+    fi
 
 # TAPPAS
 RUN apt-get update && apt-get install -y rsync ffmpeg x11-utils python3-dev python3-pip python3-setuptools \
     python3-virtualenv python-gi-dev libgirepository1.0-dev cmake git libzmq3-dev
-ADD tappas_*_linux_installer.zip tappas_linux_installer.zip
-RUN apt-get update && apt-get install -y unzip bsdmainutils libcairo2-dev libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x
-RUN unzip tappas_linux_installer.zip && rm tappas_linux_installer.zip && mv tappas_* tappas
-RUN cd tappas && ./install.sh --skip-hailort
+ADD hailo-tappas-core_*.deb hailo_tappas_core.deb
+RUN apt-get install ./hailo_tappas_core.deb
 # Rejigger some of the install file locations to make them match the Raspberry Pi.
 RUN mkdir -p /usr/lib/x86_64-linux-gnu/hailo/tappas/ && \
     cp -R /hailo/tappas/apps/h8/gstreamer/libs/post_processes /usr/lib/x86_64-linux-gnu/hailo/tappas/
@@ -87,12 +87,12 @@ RUN mkdir -p /usr/include/hailo/tappas/ && \
 ARG ROS_SSH_PUBLIC_KEY
 RUN apt-get update && apt-get install -y ssh rsync && rm -rf /var/lib/apt/lists/*
 RUN test -n "$ROS_SSH_PUBLIC_KEY" \
-  && mkdir -p /run/sshd /home/ros/.ssh \
-  && printf "%s\n" "$ROS_SSH_PUBLIC_KEY" > /home/ros/.ssh/authorized_keys \
-  && chmod 700 /home/ros/.ssh \
-  && chmod 600 /home/ros/.ssh/authorized_keys \
-  && chown -R ros:ros /home/ros/.ssh \
-  && ( \
+    && mkdir -p /run/sshd /home/ros/.ssh \
+    && printf "%s\n" "$ROS_SSH_PUBLIC_KEY" > /home/ros/.ssh/authorized_keys \
+    && chmod 700 /home/ros/.ssh \
+    && chmod 600 /home/ros/.ssh/authorized_keys \
+    && chown -R ros:ros /home/ros/.ssh \
+    && ( \
     echo 'LogLevel DEBUG2'; \
     echo 'PermitRootLogin no'; \
     echo 'PasswordAuthentication no'; \
@@ -101,7 +101,7 @@ RUN test -n "$ROS_SSH_PUBLIC_KEY" \
     echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
     echo 'AllowUsers ros'; \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-  ) > /etc/ssh/sshd_config_test_clion
+    ) > /etc/ssh/sshd_config_test_clion
 
 # Password login is disabled; SSH key auth is configured via ROS_SSH_PUBLIC_KEY.
 
