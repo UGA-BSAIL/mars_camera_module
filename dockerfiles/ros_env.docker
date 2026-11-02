@@ -18,8 +18,24 @@ RUN useradd -m -u $ROS_UID ros
 # Disable account password while allowing SSH logins.
 RUN usermod -p '*' ros
 
+#####
+# Common environment for building the code and running video extraction.
+#####
+FROM common AS partial_ros_env
+
+# Install dependencies.
+RUN apt-get update && apt-get install -y ffmpeg python3-pip libv4l-dev \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies.
+ADD scripts/requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+
+#####
 # Container for building the code.
-FROM common as builder
+#####
+FROM partial_ros_env AS builder
 
 # Copy the wrapper script for cmake.
 ADD scripts/catkin_cmake.sh /usr/bin/catkin_cmake
@@ -39,15 +55,8 @@ RUN cd libcamera \
     ninja -C build install
 
 # Install runtime dependencies.
-RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev libv4l-dev libopencv-dev \
+RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Install ffmpeg.
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-
-# Install python dependencies.
-ADD scripts/requirements.txt requirements.txt
-RUN pip install -r requirements.txt
 
 # For some reason, this header doesn't exist in Docker but is still needed.
 ADD external/dma-heap.h /usr/include/linux/dma-heap.h
@@ -70,7 +79,7 @@ RUN if [ "$TARGETARCH" != "arm64" ]; then \
     fi
 
 # TAPPAS
-RUN apt-get update && apt-get install -y rsync ffmpeg x11-utils python3-dev python3-pip python3-setuptools \
+RUN apt-get update && apt-get install -y rsync ffmpeg x11-utils python3-dev python3-setuptools \
     python3-virtualenv python-gi-dev libgirepository1.0-dev cmake git libzmq3-dev
 ADD hailo-tappas-core_*.deb hailo_tappas_core.deb
 RUN apt-get install ./hailo_tappas_core.deb
@@ -108,10 +117,15 @@ RUN test -n "$ROS_SSH_PUBLIC_KEY" \
 CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/etc/ssh/sshd_config_test_clion"]
 
 # Container for video extraction.
-FROM builder as video_extractor
+FROM partial_ros_env as video_extractor
 
-WORKDIR /home/ros/ros_libcamera/
-ADD src/ src/
+WORKDIR /home/ros/ros_libcamera/src
+ADD src/ffmpeg_image_transport ffmpeg_image_transport
+ADD src/ffmpeg_image_transport_msgs ffmpeg_image_transport_msgs
+ADD src/ffmpeg_image_transport_tools ffmpeg_image_transport_tools
+ADD src/flex_sync flex_sync
+ADD src/CMakeLists.txt CMakeLists.txt
+WORKDIR /home/ros/ros_libcamera
 RUN chown -R ros:ros /home/ros/ros_libcamera/
 
 # Build the code.
