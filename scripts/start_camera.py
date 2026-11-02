@@ -5,20 +5,22 @@
 This script handles deployment and management of the camera code for ROS2.
 """
 
-
-from functools import cache
 import os
 import signal
 import sys
+from functools import cache
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import confuse
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from loguru import logger
-from netifaces import interfaces, AF_INET, ifaddresses
+from netifaces import AF_INET, ifaddresses, interfaces
+
 import launch
 from launch import LaunchService
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.actions import IncludeLaunchDescription
 
 ROS_INTERFACE_NAME = "eth0"
 """
@@ -32,9 +34,9 @@ config = confuse.Configuration("camera_module", "config")
 
 @cache
 def _get_local_ip() -> str:
-    assert (
-        ROS_INTERFACE_NAME in interfaces()
-    ), f"{ROS_INTERFACE_NAME} is not a valid network interface!"
+    assert ROS_INTERFACE_NAME in interfaces(), (
+        f"{ROS_INTERFACE_NAME} is not a valid network interface!"
+    )
 
     inet_address = ifaddresses(ROS_INTERFACE_NAME)[AF_INET]
     if len(inet_address) > 1:
@@ -45,14 +47,45 @@ def _get_local_ip() -> str:
     return node_ip
 
 
-def _configure_env() -> None:
+def _configure_env(profile_path: Path) -> None:
+    """Configure child processes to use Ethernet-only Fast DDS transport.
+
+    Args:
+        profile_path: Location to write the generated Fast DDS XML profile.
+    """
+    node_ip = _get_local_ip()
+    profile_path.write_text(
+        f"""<?xml version="1.0" encoding="UTF-8"?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <transport_descriptors>
+        <transport_descriptor>
+            <transport_id>ethernet_only</transport_id>
+            <type>UDPv4</type>
+            <interfaceWhiteList>
+                <address>{node_ip}</address>
+            </interfaceWhiteList>
+        </transport_descriptor>
+    </transport_descriptors>
+    <participant profile_name="ethernet_only_participant" is_default_profile="true">
+        <rtps>
+            <userTransports>
+                <transport_id>ethernet_only</transport_id>
+            </userTransports>
+            <useBuiltinTransports>false</useBuiltinTransports>
+        </rtps>
+    </participant>
+</profiles>
+""",
+        encoding="utf-8",
+    )
     os.environ["ROS_LOCALHOST_ONLY"] = "0"
-    os.environ["ROS_IP"] = _get_local_ip()
+    os.environ["ROS_IP"] = node_ip
+    os.environ["FASTRTPS_DEFAULT_PROFILES_FILE"] = str(profile_path)
+    logger.info(f"Using Ethernet-only Fast DDS profile at {profile_path}.")
 
 
-def main() -> None:
-    _configure_env()
-
+def _launch_camera() -> None:
+    """Launch and manage the configured camera processes."""
     launch_file = config["launch_file"].as_path().as_posix()  # Path to *.launch.py
     node_name = config["node_name"].as_str()
     frame_id = config["frame_id"].as_str()
@@ -71,26 +104,35 @@ def main() -> None:
         ("frame_id", frame_id),
         ("encoder", encoder),
         ("pixel_format", pixel_format),
-        ("model_dir", str(model_dir)),
     ]
 
     logger.info("Launching {} with args {}...", launch_file, launch_args)
     launch_service = LaunchService()
-    launch_description = launch.LaunchDescription([
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(launch_file),
-            launch_arguments=launch_args,
-        )
-    ])
+    launch_description = launch.LaunchDescription(
+        [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(launch_file),
+                launch_arguments=launch_args,
+            )
+        ]
+    )
     launch_service.include_launch_description(launch_description)
 
     def shutdown_handler(*_: Any):
         logger.info("Got exit signal. Stopping launch service...")
         sys.exit(0)
+
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
     sys.exit(launch_service.run())
+
+
+def main() -> None:
+    """Keep the generated DDS profile available until the camera launch exits."""
+    with TemporaryDirectory(prefix="camera-fastdds-") as profile_directory:
+        _configure_env(Path(profile_directory) / "ethernet-only.xml")
+        _launch_camera()
 
 
 if __name__ == "__main__":
