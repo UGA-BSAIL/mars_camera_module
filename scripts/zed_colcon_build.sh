@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROS_DISTRO="humble"
+ROS_DISTRO="jazzy"
 ROS_MASTER_URI="http://localhost:11311"
 
 SETUP_FILE="/opt/ros/${ROS_DISTRO}/setup.bash"

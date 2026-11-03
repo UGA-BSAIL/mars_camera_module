@@ -1,5 +1,5 @@
 # Common container with a ROS Humble installation.
-FROM ros:humble-ros-core as common
+FROM ros:jazzy-ros-core as common
 
 # Fix timezones.
 ENV TZ=America/New_York
@@ -7,26 +7,75 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install ROS dependencies.
 RUN apt-get update && apt-get install -y \
-    ros-humble-image-transport ros-humble-vision-opencv python3-colcon-common-extensions \
-    ros-humble-ament-cmake-clang-format ros-humble-ament-cmake-black ros-humble-rosidl-typesupport-c \
+    ros-jazzy-image-transport ros-jazzy-vision-opencv python3-colcon-common-extensions \
+    ros-jazzy-ament-cmake-clang-format ros-jazzy-ament-cmake-black ros-jazzy-rosidl-typesupport-c \
     libboost-dev libboost-program-options-dev
 
+# Delete this default user as it can sometimes interfere with the ros user we
+# want to add.
+RUN userdel ubuntu
 # Add ros user.
 ARG ROS_UID
 RUN useradd -m -u $ROS_UID ros
 # Disable account password while allowing SSH logins.
 RUN usermod -p '*' ros
 
+######
+# Isolated install of TAPPAS
+#####
+FROM ubuntu:22.04 AS tappas
+
+# Install HAILO dependencies.
+WORKDIR /hailo
+# hailort
+ADD hailort_*.deb hailort.deb
+# Hack to get around systemd and sudo requirements
+RUN echo '#!/bin/sh\nexec "$@"' > /usr/bin/sudo && chmod +x /usr/bin/sudo
+RUN echo '#!/bin/bash\nexit 0' > /usr/bin/systemctl && chmod +x /usr/bin/systemctl
+RUN mkdir -p /run/systemd && echo 'docker' > /run/systemd/container
+# This will initially fail.
+RUN dpkg -i hailort.deb || true
+# Update the post-install script.
+ADD hailort_postinst.sh /var/lib/dpkg/info/hailort.postinst
+# This should succeed now.
+RUN dpkg --configure hailort
+
+# TAPPAS
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y rsync ffmpeg x11-utils \
+    python3-dev python3-pip python3-setuptools \
+    python3-virtualenv python-gi-dev libgirepository1.0-dev cmake git \
+    libzmq3-dev gcc-12 g++-12 && \
+    rm -rf /var/lib/apt/lists/*
+ADD tappas_*_linux_installer.zip tappas_linux_installer.zip
+RUN apt-get update && apt-get install -y unzip bsdmainutils libcairo2-dev libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x
+RUN unzip tappas_linux_installer.zip && rm tappas_linux_installer.zip && mv tappas_* tappas
+# Hack to get around sudo requirements
+RUN echo '#!/bin/sh\nexec "$@"' > /usr/bin/sudo && chmod +x /usr/bin/sudo
+RUN cd tappas && ./install.sh --skip-hailort --core-only
+# Rejigger some of the install file locations to make them match the Raspberry Pi.
+RUN mkdir -p /usr/lib/x86_64-linux-gnu/hailo/tappas/ && \
+    cp -R /hailo/tappas/apps/h8/gstreamer/libs/post_processes /usr/lib/x86_64-linux-gnu/hailo/tappas/
+RUN mkdir -p /usr/include/hailo/tappas/ && \
+    cp -R /hailo/tappas/core/hailo/metadata/* /usr/include/hailo/tappas/ && \
+    cp -R /hailo/tappas/core/hailo/general/* /usr/include/hailo/tappas/ && \
+    cp -R /hailo/tappas/core/hailo/tracking/* /usr/include/hailo/tappas/ && \
+    cp -R /hailo/tappas/core/hailo/libs/postprocesses/* /usr/include/hailo/tappas
+
+#####
 # Container for building the code.
-FROM common as builder
+####
+FROM common AS builder
 
 # Install libcamera.
 RUN apt-get update && apt-get install -y git ninja-build libyaml-dev python3-yaml python3-ply \
-    python3-jinja2 libgnutls28-dev openssl libdw-dev libudev-dev python3-pip gcc-12 g++-12 && \
+    python3-jinja2 libgnutls28-dev openssl libdw-dev libudev-dev python3-pip \
+    gcc-14 g++-14 meson-1.7 && \
     rm -rf /var/lib/apt/lists/*
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 50
-RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 50
-RUN pip3 install meson
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 50
+RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 50
 RUN git clone --depth 1 --branch v0.5.2+rpt20250903 https://github.com/raspberrypi/libcamera.git
 RUN cd libcamera \
     && meson build --buildtype=release -Dpipelines=rpi/vc4 -Dipas=rpi/vc4 \
@@ -38,12 +87,15 @@ RUN cd libcamera \
 RUN apt-get update && apt-get install -y libjpeg-dev libtiff-dev libpng-dev libexif-dev libv4l-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install ffmpeg.
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and venv.
+RUN apt-get update && apt-get install -y ffmpeg python3.12-venv && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies.
 ADD scripts/requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+RUN python3 -m venv /ros_venv && \
+    . /ros_venv/bin/activate && \
+    pip install -r requirements.txt
 
 # For some reason, this header doesn't exist in Docker but is still needed.
 ADD external/dma-heap.h /usr/include/linux/dma-heap.h
@@ -63,34 +115,23 @@ ADD hailort_postinst.sh /var/lib/dpkg/info/hailort.postinst
 # This should succeed now.
 RUN dpkg --configure hailort
 
-# TAPPAS
-RUN apt-get update && apt-get install -y rsync ffmpeg x11-utils python3-dev python3-pip python3-setuptools \
-    python3-virtualenv python-gi-dev libgirepository1.0-dev cmake git libzmq3-dev
-ADD tappas_*_linux_installer.zip tappas_linux_installer.zip
-RUN apt-get update && apt-get install -y unzip bsdmainutils libcairo2-dev libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x
-RUN unzip tappas_linux_installer.zip && rm tappas_linux_installer.zip && mv tappas_* tappas
-RUN cd tappas && ./install.sh --skip-hailort
-# Rejigger some of the install file locations to make them match the Raspberry Pi.
-RUN mkdir -p /usr/lib/x86_64-linux-gnu/hailo/tappas/ && \
-    cp -R /hailo/tappas/apps/h8/gstreamer/libs/post_processes /usr/lib/x86_64-linux-gnu/hailo/tappas/
-RUN mkdir -p /usr/include/hailo/tappas/ && \
-    cp -R /hailo/tappas/core/hailo/metadata/* /usr/include/hailo/tappas/ && \
-    cp -R /hailo/tappas/core/hailo/general/* /usr/include/hailo/tappas/ && \
-    cp -R /hailo/tappas/core/hailo/tracking/* /usr/include/hailo/tappas/ && \
-    cp -R /hailo/tappas/core/hailo/libs/postprocesses/* /usr/include/hailo/tappas
+# Copy TAPPAS files.
+COPY --from=tappas /usr/include/hailo/tappas /usr/include/hailo/tappas
+RUN ln -s /usr/lib/$(uname -m)-linux-gnu /usr-lib-linux-gnu
+COPY --from=tappas /usr/lib/*-linux-gnu/hailo/tappas \
+    /usr-lib-linux-gnu/hailo/tappas
+RUN rm /usr-lib-linux-gnu
 
 # Set up SSH for CLion.
 ARG ROS_SSH_PUBLIC_KEY
 RUN apt-get update && apt-get install -y ssh rsync && rm -rf /var/lib/apt/lists/*
 RUN test -n "$ROS_SSH_PUBLIC_KEY" \
-  && mkdir -p /run/sshd /home/ros/.ssh \
-  && printf "%s\n" "$ROS_SSH_PUBLIC_KEY" > /home/ros/.ssh/authorized_keys \
-  && chmod 700 /home/ros/.ssh \
-  && chmod 600 /home/ros/.ssh/authorized_keys \
-  && chown -R ros:ros /home/ros/.ssh \
-  && ( \
+    && mkdir -p /run/sshd /home/ros/.ssh \
+    && printf "%s\n" "$ROS_SSH_PUBLIC_KEY" > /home/ros/.ssh/authorized_keys \
+    && chmod 700 /home/ros/.ssh \
+    && chmod 600 /home/ros/.ssh/authorized_keys \
+    && chown -R ros:ros /home/ros/.ssh \
+    && ( \
     echo 'LogLevel DEBUG2'; \
     echo 'PermitRootLogin no'; \
     echo 'PasswordAuthentication no'; \
@@ -99,7 +140,7 @@ RUN test -n "$ROS_SSH_PUBLIC_KEY" \
     echo 'AuthorizedKeysFile .ssh/authorized_keys'; \
     echo 'AllowUsers ros'; \
     echo 'Subsystem sftp /usr/lib/openssh/sftp-server'; \
-  ) > /etc/ssh/sshd_config_test_clion
+    ) > /etc/ssh/sshd_config_test_clion
 
 # Password login is disabled; SSH key auth is configured via ROS_SSH_PUBLIC_KEY.
 
@@ -118,7 +159,7 @@ RUN chown -R ros:ros /home/ros/mars_camera_module/
 # Build the code.
 USER ros
 
-RUN bash -c "source /opt/ros/humble/setup.bash && colcon build"
+RUN bash -c "source /opt/ros/jazzy/setup.bash && colcon build"
 
 # Add scripts to run.
 ADD scripts/extract_videos.py extract_videos.py
