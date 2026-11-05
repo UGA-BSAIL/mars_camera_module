@@ -32,9 +32,7 @@ def generate_launch_description():
     )
     postprocess_file_arg = DeclareLaunchArgument(
         "postprocess_file",
-        default_value=TextSubstitution(
-            text="/usr/share/rpi-camera-assets/ai_pheno/hailo_yolov8_flower_inference.json"
-        ),
+        default_value=TextSubstitution(text=""),
         description="The file defining the post-processing configuration to use.",
     )
     ir_postprocess_file_arg = DeclareLaunchArgument(

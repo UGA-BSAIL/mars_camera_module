@@ -391,7 +391,8 @@ class CameraNode : public rclcpp::Node {
 
     options_.framerate = get_parameter("fps").as_int();
     options_.mode = Mode(get_parameter("width").as_int(),
-                         get_parameter("height").as_int(), 24, false);
+                         get_parameter("height").as_int(), 8, false);
+    options_.mode.framerate = get_parameter("fps").as_double();
     options_.width = get_parameter("width").as_int();
     options_.height = get_parameter("height").as_int();
 
